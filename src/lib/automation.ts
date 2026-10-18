@@ -12,7 +12,9 @@ import {
   type Lead,
 } from "@/db/schema";
 import { generateProposal } from "@/lib/agent";
+import { answerQuestion } from "@/lib/faq";
 import { php, type RoiModel } from "@/lib/roi";
+import { sendWhatsappText, whatsappConfigured } from "@/lib/whatsapp";
 
 /* ------------------------------------------------------------------ *
  * Rule catalogue — the owner sees these in /admin/automations
@@ -24,6 +26,7 @@ export type RuleKey =
   | "auto_proposal"
   | "auto_book_audit"
   | "auto_followup"
+  | "whatsapp_faq"
   | "fleet_health_sweep"
   | "stale_lead_sweep";
 
@@ -81,6 +84,15 @@ export const RULES: RuleDef[] = [
     trigger: "intake",
     defaultEnabled: true,
     config: { followUpDays: 3 },
+  },
+  {
+    key: "whatsapp_faq",
+    label: "WhatsApp FAQ answers",
+    description:
+      "Answers the question the guest actually asked on WhatsApp, grounded in the Amates knowledge base — pricing logic, warranty, monitoring, coverage — instead of a canned reply.",
+    trigger: "intake",
+    defaultEnabled: true,
+    config: {},
   },
   {
     key: "fleet_health_sweep",
@@ -348,44 +360,96 @@ export type AutomationOutcome = {
 };
 
 /**
+ * Delivers a free-form WhatsApp reply and describes exactly what happened.
+ *
+ * Free-form text is only permitted inside WhatsApp's 24-hour customer service
+ * window — open for enquiries that arrived by WhatsApp, closed for web-form
+ * leads until they message us. Those cases are reported as `skipped`, never as
+ * sent, because an audit log that lies is worse than no audit log.
+ */
+type Delivery = {
+  status: "ok" | "skipped" | "error";
+  action: "sent" | "skipped";
+  text: string;
+  meta: Record<string, unknown>;
+};
+
+async function deliverToLead(lead: Lead, body: string): Promise<Delivery> {
+  if (!whatsappConfigured()) {
+    return {
+      status: "skipped",
+      action: "skipped",
+      text: "Not sent — WhatsApp is not configured (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID unset).",
+      meta: { reason: "not_configured" },
+    };
+  }
+
+  if (lead.sourceChannel !== "whatsapp") {
+    return {
+      status: "skipped",
+      action: "skipped",
+      text: `Not sent to ${lead.contactWhatsapp}: arrived via ${lead.sourceChannel}, outside WhatsApp's 24-hour reply window. Needs an approved template.`,
+      meta: { reason: "outside_service_window", channel: lead.sourceChannel },
+    };
+  }
+
+  const result = await sendWhatsappText(lead.contactWhatsapp, body);
+  if (result.sent) {
+    return {
+      status: "ok",
+      action: "sent",
+      text: `Delivered to ${result.to} (${result.messageId.slice(0, 28)}).`,
+      meta: { messageId: result.messageId, reason: "sent" },
+    };
+  }
+
+  return {
+    status: result.reason === "outside_service_window" ? "skipped" : "error",
+    action: "skipped",
+    text: `NOT delivered to ${lead.contactWhatsapp} — ${result.detail}`,
+    meta: { reason: result.reason },
+  };
+}
+
+function logStatus(delivery: Delivery): string {
+  if (delivery.status === "error") return "error";
+  if (delivery.status === "skipped") return "skip";
+  return "ok";
+}
+
+/**
  * Runs every intake automation for a freshly created lead.
  * Never throws — a broken rule must not break lead capture.
  */
 export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcome[]> {
   const outcomes: AutomationOutcome[] = [];
   const roi = (await import("@/lib/roi")).computeRoi(lead);
+  // Scored up front: the acknowledgement mentions priority, and every later
+  // step wants the tier.
+  const score = scoreLead(lead);
 
-  // 1. Acknowledgement
+  // 1. Acknowledgement — actually delivered, and logged as it really went.
   if (await ruleEnabled("auto_reply")) {
-    outcomes.push({
-      rule: "auto_reply",
-      status: "ok",
-      message: `Acknowledgement queued to ${lead.contactWhatsapp}${
-        lead.contactEmail ? ` + ${lead.contactEmail}` : ""
-      }.`,
-    });
-    await log("auto_reply", "acknowledge", outcomes[0].message, {
+    const delivery = await deliverToLead(lead, buildAutoReply(lead, roi, score));
+    outcomes.push({ rule: "auto_reply", status: delivery.status, message: delivery.text });
+    await log("auto_reply", delivery.action, delivery.text, {
       targetId: lead.id,
-      meta: { channel: lead.sourceChannel },
+      status: logStatus(delivery),
+      meta: { channel: lead.sourceChannel, ...delivery.meta },
     });
   } else {
     outcomes.push({ rule: "auto_reply", status: "skipped", message: "Rule disabled by owner." });
   }
 
   // 2. Scoring
-  let score: LeadScore | null = null;
   if (await ruleEnabled("auto_score")) {
-    score = scoreLead(lead);
     await db
       .update(leads)
       .set({ leadScore: score.score, leadTier: score.tier, updatedAt: new Date() })
       .where(eq(leads.id, lead.id));
-    outcomes.push({
-      rule: "auto_score",
-      status: "ok",
-      message: `Scored ${score.score}/100 (${score.tier}).`,
-    });
-    await log("auto_score", "score", outcomes[1].message, {
+    const message = `Scored ${score.score}/100 (${score.tier}).`;
+    outcomes.push({ rule: "auto_score", status: "ok", message });
+    await log("auto_score", "score", message, {
       targetId: lead.id,
       meta: { score: score.score, tier: score.tier, reasons: score.reasons },
     });
@@ -397,22 +461,16 @@ export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcom
   if (await ruleEnabled("auto_proposal")) {
     try {
       const proposal = await generateProposal(lead);
-      outcomes.push({
-        rule: "auto_proposal",
-        status: "ok",
-        message: `${proposal.summary} (${proposal.engine}).`,
-      });
-      await log("auto_proposal", "generate", outcomes[2].message, {
+      const message = `${proposal.summary} (${proposal.engine}).`;
+      outcomes.push({ rule: "auto_proposal", status: "ok", message });
+      await log("auto_proposal", "generate", message, {
         targetId: lead.id,
         meta: { proposalId: proposal.proposalId, engine: proposal.engine, model: proposal.model },
       });
     } catch (error) {
-      outcomes.push({
-        rule: "auto_proposal",
-        status: "error",
-        message: `Proposal failed: ${(error as Error).message}`,
-      });
-      await log("auto_proposal", "generate", outcomes[2].message, {
+      const message = `Proposal failed: ${(error as Error).message}`;
+      outcomes.push({ rule: "auto_proposal", status: "error", message });
+      await log("auto_proposal", "generate", message, {
         status: "error",
         targetId: lead.id,
       });
@@ -442,12 +500,9 @@ export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcom
       .set({ status: "audit_booked", updatedAt: new Date() })
       .where(eq(leads.id, lead.id));
 
-    outcomes.push({
-      rule: "auto_book_audit",
-      status: "ok",
-      message: `Audit booked for ${slot.toLocaleString("en-PH")}.`,
-    });
-    await log("auto_book_audit", "book", outcomes[3].message, {
+    const bookedMessage = `Audit booked for ${slot.toLocaleString("en-PH")}.`;
+    outcomes.push({ rule: "auto_book_audit", status: "ok", message: bookedMessage });
+    await log("auto_book_audit", "book", bookedMessage, {
       targetType: "appointment",
       targetId: appointment.id,
       meta: { leadId: lead.id },
@@ -466,12 +521,9 @@ export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcom
         location: lead.location,
         notes: "Automatic follow-up on the proposal generated at intake.",
       });
-      outcomes.push({
-        rule: "auto_followup",
-        status: "ok",
-        message: `Follow-up set for ${followUp.toLocaleDateString("en-PH")}.`,
-      });
-      await log("auto_followup", "schedule", outcomes[4].message, { targetId: lead.id });
+      const followUpMessage = `Follow-up set for ${followUp.toLocaleDateString("en-PH")}.`;
+      outcomes.push({ rule: "auto_followup", status: "ok", message: followUpMessage });
+      await log("auto_followup", "schedule", followUpMessage, { targetId: lead.id });
     }
   } else {
     outcomes.push({ rule: "auto_book_audit", status: "skipped", message: "Rule disabled by owner." });
@@ -493,6 +545,32 @@ export function buildAutoReply(lead: Lead, roi: RoiModel, score?: LeadScore): st
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * Answers the question a guest actually asked on WhatsApp, and sends it.
+ *
+ * Deliberately a second message rather than a replacement for the
+ * acknowledgement: the acknowledgement carries the instant estimate, this one
+ * carries the answer. Own rule (`whatsapp_faq`) so the owner can switch it off
+ * without losing the estimate.
+ */
+export async function replyToQuestion(lead: Lead, question: string): Promise<AutomationOutcome> {
+  if (!(await ruleEnabled("whatsapp_faq"))) {
+    return { rule: "whatsapp_faq", status: "skipped", message: "Rule disabled by owner." };
+  }
+
+  const { answer, engine, model } = await answerQuestion(question, lead);
+  const delivery = await deliverToLead(lead, answer);
+  const message = `${engine === "openrouter" ? "AI" : "knowledge-base"} answer (${model}) — ${delivery.text}`;
+
+  await log("whatsapp_faq", delivery.action, message, {
+    targetId: lead.id,
+    status: logStatus(delivery),
+    meta: { ...delivery.meta, engine, model, question: question.slice(0, 300) },
+  });
+
+  return { rule: "whatsapp_faq", status: delivery.status, message };
 }
 
 /* ------------------------------------------------------------------ *

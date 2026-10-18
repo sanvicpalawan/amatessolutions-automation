@@ -3,10 +3,18 @@ import { after } from "next/server";
 import { db } from "@/db";
 import { leads } from "@/db/schema";
 import { normalizeLead, parseWhatsappMessage } from "@/lib/leads";
-import { buildAutoReply, runIntakeAutomations, scoreLead } from "@/lib/automation";
+import {
+  buildAutoReply,
+  replyToQuestion,
+  runIntakeAutomations,
+  scoreLead,
+} from "@/lib/automation";
+import { looksLikeQuestion } from "@/lib/faq";
 import { computeRoi } from "@/lib/roi";
 
 export const dynamic = "force-dynamic";
+/** Outbound replies and the proposal both run in `after()`, so allow for them. */
+export const maxDuration = 60;
 
 /** Meta-style verification handshake (stub). */
 export async function GET(request: Request) {
@@ -38,8 +46,9 @@ type MetaWebhook = {
 /**
  * POST /api/webhook/whatsapp
  * Accepts either a Meta Cloud API payload or a simple { from, text } body,
- * parses the message, writes it into the unified `leads` table, and replies
- * instantly with an ROI estimate + auto-booked audit confirmation.
+ * parses the message, writes it into the unified `leads` table, and — when
+ * WhatsApp credentials are configured — actually answers the guest: an instant
+ * ROI acknowledgement, plus a knowledge-base answer if they asked a question.
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as MetaWebhook;
@@ -65,16 +74,28 @@ export async function POST(request: Request) {
 
   const [row] = await db.insert(leads).values(result.lead).returning({ id: leads.id });
 
-  // Reply instantly with the estimate, then finish the pipeline in background.
+  // Reply instantly with the estimate, then do the real delivery in the background.
   const lead = { ...result.lead, id: row.id } as Parameters<typeof runIntakeAutomations>[0];
   const roi = computeRoi(lead);
   const reply = buildAutoReply(lead, roi, scoreLead(lead));
+  const question = looksLikeQuestion(text) ? text : null;
 
+  // Meta wants a fast 200 and retries anything slower, so nothing is sent inline.
+  // The acknowledgement fires in the first second of `runIntakeAutomations`;
+  // the FAQ answer lands whenever the model answers. Running them together means
+  // the guest gets the estimate first and the answer as soon as it is ready,
+  // rather than waiting behind proposal generation.
   after(async () => {
-    try {
-      await runIntakeAutomations(lead);
-    } catch (error) {
-      console.error("[automation] whatsapp pipeline failed", error);
+    const [pipeline, faq] = await Promise.allSettled([
+      runIntakeAutomations(lead),
+      question ? replyToQuestion(lead, question) : Promise.resolve(null),
+    ]);
+
+    if (pipeline.status === "rejected") {
+      console.error("[automation] whatsapp pipeline failed", pipeline.reason);
+    }
+    if (faq.status === "rejected") {
+      console.error("[automation] whatsapp FAQ reply failed", faq.reason);
     }
   });
 
@@ -92,6 +113,8 @@ export async function POST(request: Request) {
       monthlySavingsPhp: roi.monthlySavingsPhp,
       paybackYears: roi.paybackYears,
     },
+    /** Echoed for callers that predate outbound delivery; the guest reply is sent, not returned. */
     reply,
+    answeringQuestion: Boolean(question),
   });
 }

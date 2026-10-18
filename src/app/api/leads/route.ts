@@ -10,6 +10,8 @@ import { computeRoi } from "@/lib/roi";
 import { ensureSeedData } from "@/lib/seed";
 
 export const dynamic = "force-dynamic";
+/** Proposal generation and any outbound acknowledgement run in `after()`. */
+export const maxDuration = 60;
 
 /** Admin listing with filter + search (parameterized via Drizzle). */
 export async function GET(request: Request) {
