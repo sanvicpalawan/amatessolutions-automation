@@ -23,8 +23,26 @@ export type ValidationResult =
   | { ok: true; lead: NewLead }
   | { ok: false; errors: Record<string, string> };
 
+export type NormalizeOptions = {
+  /**
+   * Whether a usage figure (kWh or monthly bill) is required.
+   *
+   * True for the website quote form, which asks for it. False for WhatsApp,
+   * where the message is free text: a guest who opens with "hi" must still
+   * become a lead — the agent asks for the bill in its reply instead of dropping
+   * the message. Without this, free-text intake had to invent a bill (see the
+   * `monthlyBillPhp` note in `parseWhatsappMessage`) just to pass validation.
+   */
+  requireUsage?: boolean;
+};
+
 /** Normalises + validates an intake payload from either the web form or WhatsApp. */
-export function normalizeLead(payload: IntakePayload, sourceChannel: string): ValidationResult {
+export function normalizeLead(
+  payload: IntakePayload,
+  sourceChannel: string,
+  options: NormalizeOptions = {},
+): ValidationResult {
+  const requireUsage = options.requireUsage ?? true;
   const errors: Record<string, string> = {};
 
   const contactName = str(payload.contactName) || str(payload.name);
@@ -48,7 +66,7 @@ export function normalizeLead(payload: IntakePayload, sourceChannel: string): Va
 
   const energyUsageKwh = num(payload.energyUsageKwh ?? payload.usage);
   const monthlyBillPhp = num(payload.monthlyBillPhp ?? payload.bill);
-  if (!energyUsageKwh && !monthlyBillPhp) {
+  if (requireUsage && !energyUsageKwh && !monthlyBillPhp) {
     errors.energyUsageKwh = "Give us either monthly kWh or your monthly bill.";
   }
 
@@ -108,10 +126,15 @@ export function parseWhatsappMessage(text: string, from: string): IntakePayload 
   const bill =
     /(?:php|peso|₱)\s*([\d,.]+)/i.exec(text)?.[1]?.replace(/,/g, "") ??
     /([\d,.]+)\s*(?:php|pesos?|₱)\b/i.exec(text)?.[1]?.replace(/,/g, "");
-  // Capture a name, not a sentence. The old pattern ran up to 40 characters of
-  // letters, dots and spaces, so the project's own example message
-  // "Hi, I'm Ana. Resort in El Nido" stored the name as "Ana. Resort in El Nido".
-  const name = /(?:i'?m|i am|name(?:'s| is)|this is)\s+([A-Z][A-Za-z'\-]*(?:\s+[A-Z][A-Za-z'\-]*){0,2})/.exec(text)?.[1]?.trim();
+  // Find the trigger case-insensitively, then require the name itself to be
+  // capitalised, so "I am ana" does not store "ana" and "I am Ana. Resort in El
+  // Nido" stores only "Ana" rather than running on into the sentence.
+  const nameTrigger = /(?:i'?m|i am|name(?:'s| is)|this is)\s+/i.exec(text);
+  const name = nameTrigger
+    ? /^([A-Z][A-Za-z'\-]*(?:\s+[A-Z][A-Za-z'\-]*){0,2})/.exec(
+        text.slice(nameTrigger.index + nameTrigger[0].length),
+      )?.[1]
+    : undefined;
 
   return {
     contactName: name || `WhatsApp ${from.slice(-4)}`,

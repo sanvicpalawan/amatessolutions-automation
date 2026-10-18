@@ -88,7 +88,7 @@ export async function POST(request: Request) {
   const parsed = parseWhatsappMessage(text, normalizedFrom);
   if (profileName) parsed.contactName = profileName;
 
-  const result = normalizeLead(parsed, "whatsapp");
+  const result = normalizeLead(parsed, "whatsapp", { requireUsage: false });
   if (!result.ok) {
     return Response.json({ ok: false, errors: result.errors }, { status: 422 });
   }
