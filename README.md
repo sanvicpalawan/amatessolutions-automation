@@ -17,7 +17,7 @@ Stack: **Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Drizzle ORM
 | UI | React 19 · Tailwind CSS v4 · Lucide icons · Simple Icons brand marks |
 | Database | PostgreSQL (Neon) via Drizzle ORM 0.45 |
 | AI | OpenRouter, backend-only — with a deterministic ROI engine as fallback |
-| Scheduling | Vercel Cron (`0 * * * *`) |
+| Scheduling | Vercel Cron — daily 06:00 Asia/Manila (`0 22 * * *`) |
 | Messaging | WhatsApp Cloud API webhook |
 | Deploy | Vercel (`vercel.json`) |
 
@@ -38,7 +38,7 @@ src/
 │       ├── quote/generate/   # AI proposal + ROI
 │       ├── appointments/     # booking calendar + crew dispatch
 │       ├── webhook/whatsapp/ # Meta Cloud API inbound
-│       └── cron/sweep/       # hourly fleet + SLA sweep
+│       └── cron/sweep/       # daily fleet + SLA sweep
 ├── components/
 │   ├── site/                 # public UI
 │   └── admin/                # backoffice UI
@@ -52,16 +52,22 @@ src/
     ├── roi.ts                # client-safe ROI maths
     ├── knowledge.ts          # grounded prompt context
     └── seed.ts               # demo data — development only
-drizzle.config.json
+drizzle/
+├── 0000_normal_stellaris.sql  # 12 tables — schema as code
+└── meta/                      # journal `migrate` replays
+drizzle.config.ts              # env-based; migrates over DATABASE_URL_UNPOOLED
+neon.ts                        # Neon IaC — declares no services (Postgres is implicit)
 vercel.json
-.env.example                  # every variable documented, no secrets committed
+.vercelignore                  # keeps .env.local out of deployments
+.env.example                   # every variable documented, no secrets committed
 ```
 
 ## Languages
 
 ```
-TypeScript  ████████████████████████████████  98.8%
+TypeScript  ████████████████████████████████  98.7%
 CSS         ██                                 1.1%
+JavaScript  ▏                                  0.1%
 ```
 
 ---
