@@ -104,8 +104,14 @@ export function parseWhatsappMessage(text: string, from: string): IntakePayload 
     PALAWAN_LOCATIONS.find((place) => lower.includes(place.toLowerCase())) ?? "Puerto Princesa";
 
   const kwh = /([\d,.]+)\s*kwh/i.exec(text)?.[1]?.replace(/,/g, "");
-  const bill = /(?:php|peso|₱)\s*([\d,.]+)/i.exec(text)?.[1]?.replace(/,/g, "");
-  const name = /(?:i'?m|name is|this is)\s+([A-Za-z][A-Za-z.\- ]{1,40})/i.exec(text)?.[1]?.trim();
+  // Customers write money both ways — "PHP 80,000" and "80000 pesos".
+  const bill =
+    /(?:php|peso|₱)\s*([\d,.]+)/i.exec(text)?.[1]?.replace(/,/g, "") ??
+    /([\d,.]+)\s*(?:php|pesos?|₱)\b/i.exec(text)?.[1]?.replace(/,/g, "");
+  // Capture a name, not a sentence. The old pattern ran up to 40 characters of
+  // letters, dots and spaces, so the project's own example message
+  // "Hi, I'm Ana. Resort in El Nido" stored the name as "Ana. Resort in El Nido".
+  const name = /(?:i'?m|i am|name(?:'s| is)|this is)\s+([A-Z][A-Za-z'\-]*(?:\s+[A-Z][A-Za-z'\-]*){0,2})/.exec(text)?.[1]?.trim();
 
   return {
     contactName: name || `WhatsApp ${from.slice(-4)}`,
@@ -114,7 +120,12 @@ export function parseWhatsappMessage(text: string, from: string): IntakePayload 
     location,
     gridState: grid,
     energyUsageKwh: kwh ?? null,
-    monthlyBillPhp: bill ?? (kwh ? null : "6000"),
+    // Never invent a consumption figure. This used to default to "6000" when a
+    // message mentioned no bill, so a message as bare as "hi" produced a
+    // confident estimate that sized a dive resort like a family house.
+    // `computeRoi` already falls back to typical use for the property type, and
+    // the reply says so when we have no real numbers.
+    monthlyBillPhp: bill ?? null,
     timeline: /asap|urgent|immediately|now/.test(lower) ? "immediate" : "exploring",
     notes: text.slice(0, 500),
   };

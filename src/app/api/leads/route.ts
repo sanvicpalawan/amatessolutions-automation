@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { leads } from "@/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { normalizeLead } from "@/lib/leads";
-import { buildAutoReply, runIntakeAutomations, scoreLead } from "@/lib/automation";
+import { runIntakeAutomations } from "@/lib/automation";
 import { computeRoi } from "@/lib/roi";
 import { ensureSeedData } from "@/lib/seed";
 

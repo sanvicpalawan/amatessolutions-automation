@@ -473,13 +473,13 @@ function logStatus(delivery: Delivery): string {
 export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcome[]> {
   const outcomes: AutomationOutcome[] = [];
   const roi = (await import("@/lib/roi")).computeRoi(lead);
-  // Scored up front: the acknowledgement mentions priority, and every later
-  // step wants the tier.
+  // Scored up front: every step after the acknowledgement wants the tier, and it
+  // is recorded in the log rather than sent to the customer.
   const score = scoreLead(lead);
 
   // 1. Acknowledgement — actually delivered, and logged as it really went.
   if (await ruleEnabled("auto_reply")) {
-    const body = buildAutoReply(lead, roi, score);
+    const body = buildAutoReply(lead, roi);
     const delivery = await deliverToLead(
       lead,
       body,
@@ -492,6 +492,8 @@ export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcom
       meta: {
         sourceChannel: lead.sourceChannel,
         deliveredVia: delivery.channel,
+        tier: score.tier,
+        score: score.score,
         ...delivery.meta,
         body: body.slice(0, 4000),
       },
@@ -591,16 +593,27 @@ export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcom
   return outcomes;
 }
 
-/** Builds the instant reply text (used by the WhatsApp webhook). */
-export function buildAutoReply(lead: Lead, roi: RoiModel, score?: LeadScore): string {
+/**
+ * Builds the instant reply text sent to the guest (used by the WhatsApp webhook).
+ *
+ * Two things this must not do: quote a figure it cannot stand behind, and leak
+ * internal triage to the customer. If the guest has not given us a load, the
+ * estimate comes from typical use for that kind of site and the reply says so.
+ */
+export function buildAutoReply(lead: Lead, roi: RoiModel): string {
+  const knowsTheirLoad = Boolean(lead.energyUsageKwh || lead.monthlyBillPhp);
+  const site = lead.propertyType.replace(/_/g, " ");
+
   return [
     `Salamat ${lead.contactName}! Amates Solutions received your request for ${lead.location}, Palawan.`,
     "",
-    `Instant estimate: ~${roi.systemSizeKw} kWp solar + ${roi.batteryKwh} kWh storage.`,
+    `Indicative size for a ${site} site: about ${roi.systemSizeKw} kWp solar + ${roi.batteryKwh} kWh storage.`,
     `Estimated saving ${php(roi.monthlySavingsPhp)}/month, payback ~${roi.paybackYears} years.`,
+    knowsTheirLoad
+      ? ""
+      : "That is based on typical consumption for this kind of site, not your actual load. Send your monthly kWh or your monthly bill and we will size it properly.",
     "",
     `A free site audit has been requested for you. Our team will confirm the slot on this number shortly.`,
-    score ? `Priority: ${score.tier.toUpperCase()} (${score.score}/100).` : "",
   ]
     .filter(Boolean)
     .join("\n");

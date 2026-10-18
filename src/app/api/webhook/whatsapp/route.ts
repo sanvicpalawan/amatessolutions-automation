@@ -13,7 +13,6 @@ import {
   buildAutoReply,
   replyToQuestion,
   runIntakeAutomations,
-  scoreLead,
 } from "@/lib/automation";
 import { looksLikeQuestion } from "@/lib/faq";
 import { computeRoi } from "@/lib/roi";
@@ -118,7 +117,7 @@ export async function POST(request: Request) {
   });
 
   const roi = computeRoi(lead);
-  const reply = buildAutoReply(lead, roi, scoreLead(lead));
+  const reply = buildAutoReply(lead, roi);
   const question = looksLikeQuestion(text) ? text : null;
 
   // Meta wants a fast 200 and retries anything slower, so nothing is sent inline.
