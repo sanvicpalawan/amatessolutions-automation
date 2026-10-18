@@ -38,7 +38,9 @@ export type ModelCache = {
 };
 
 export const DEFAULT_OPENROUTER_CONFIG: OpenRouterConfig = {
-  freeModel: "meta-llama/llama-3.3-70b-instruct:free",
+  // OpenRouter retires free models without notice — llama-3.3-70b:free is already gone.
+  // Keep this pointing at a model that is actually in the catalogue.
+  freeModel: "nvidia/nemotron-3-super-120b-a12b:free",
   paidModel: "openai/gpt-4o-mini",
   preferred: "free",
   temperature: 0.4,
