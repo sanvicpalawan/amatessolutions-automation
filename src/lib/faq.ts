@@ -103,7 +103,7 @@ function systemPrompt(): string {
     "- Maximum 110 words. Warm, specific and commercial.",
     "- Any price you give is guidance only and must point to the free site audit for a firm figure.",
     "- If the customer has given their own numbers, use them rather than generic examples.",
-    "- Never claim to have booked, scheduled or sent anything you have not.",
+    "- Never claim an appointment has been booked, a crew scheduled, or a message delivered. You do not have that information.",
     "",
     "REFERENCE MATERIAL:",
     buildKnowledgeDocument(),

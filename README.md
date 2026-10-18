@@ -18,7 +18,7 @@ Stack: **Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Drizzle ORM
 | Database | PostgreSQL (Neon) via Drizzle ORM 0.45 |
 | AI | OpenRouter, backend-only — with a deterministic ROI engine as fallback |
 | Scheduling | Vercel Cron — daily 06:00 Asia/Manila (`0 22 * * *`) |
-| Messaging | WhatsApp Cloud API webhook |
+| Messaging | WhatsApp Cloud API — inbound webhook + outbound replies (`src/lib/whatsapp.ts`) |
 | Deploy | Vercel (`vercel.json`) |
 
 ## Project structure
@@ -37,7 +37,7 @@ src/
 │       ├── leads/            # public intake + admin CRM
 │       ├── quote/generate/   # AI proposal + ROI
 │       ├── appointments/     # booking calendar + crew dispatch
-│       ├── webhook/whatsapp/ # Meta Cloud API inbound
+│       ├── webhook/whatsapp/ # Meta Cloud API inbound + outbound replies
 │       └── cron/sweep/       # daily fleet + SLA sweep
 ├── components/
 │   ├── site/                 # public UI
@@ -47,7 +47,9 @@ src/
 │   └── index.ts              # pooled pg client
 └── lib/                      # domain logic
     ├── agent.ts              # LLM pass + deterministic ROI engine
-    ├── automation.ts         # 7 automation rules
+    ├── automation.ts         # 8 automation rules + honest audit log
+    ├── whatsapp.ts           # Cloud API sender — structured outcomes, never throws
+    ├── faq.ts                # knowledge-grounded answers, deterministic fallback
     ├── auth.ts               # passkey + signed sessions
     ├── roi.ts                # client-safe ROI maths
     ├── knowledge.ts          # grounded prompt context
@@ -253,17 +255,30 @@ response is sent, so the form stays instant.
 
 | Rule | Trigger | What it does |
 | ---- | ------- | ------------ |
-| `auto_reply` | intake | Queues an immediate acknowledgement to the lead |
+| `auto_reply` | intake | **Sends** the acknowledgement over WhatsApp — estimate, priority, next step. Logs `sent`, `skipped` or `error` truthfully |
 | `auto_score` | intake | Scores the lead 0–100 (`hot`/`warm`/`cool`) from property type, grid state, usage and timeline |
 | `auto_proposal` | intake | Runs the AI agent and stores the proposal + ROI — no button press |
 | `auto_book_audit` | intake | Picks the next free weekday slot and books the site audit, moving the lead to `audit booked` |
 | `auto_followup` | intake | Adds a follow-up task 3 days after the audit |
-| `fleet_health_sweep` | hourly | Raises a maintenance job for any monitored site in `warning`/`offline` or without WIFI |
-| `stale_lead_sweep` | hourly | Creates an SLA follow-up for leads untouched for 24 h |
+| `whatsapp_faq` | intake | Answers the question the guest actually asked, grounded in `src/lib/knowledge.ts` — LLM first, deterministic fallback |
+| `fleet_health_sweep` | daily | Raises a maintenance job for any monitored site in `warning`/`offline` or without WIFI |
+| `stale_lead_sweep` | daily | Creates an SLA follow-up for leads untouched for 24 h |
 
 Each rule is a toggle in **`/admin/automations`**, alongside a live activity log and a **Run sweep
-now** button. Every action is written to `automation_log` so the owner can see exactly what the
-system did.
+now** button. Every action is written to `automation_log` — including the reply text, and for the
+FAQ rule the question and the full answer — so the owner can see exactly what the system did *and*
+what it said to a customer.
+
+### Outbound delivery
+
+`src/lib/whatsapp.ts` posts to the WhatsApp Cloud API and returns a structured outcome rather than
+throwing, so the log never has to guess. Two honest limits:
+
+* **Off unless configured.** With `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` unset nothing
+  is sent, and the log says `not configured` rather than claiming a delivery.
+* **24-hour window.** WhatsApp permits free-form replies only to someone who messaged us in the last
+  24 hours. Replying to a WhatsApp enquiry works; a **web-form** lead is logged as
+  `skipped: outside the 24h window`. Proactive follow-ups need an approved Meta message template.
 
 ```bash
 # Manual sweep
@@ -271,8 +286,8 @@ curl -X POST http://localhost:3000/api/cron/sweep \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-On Vercel, `vercel.json` schedules `0 * * * *` automatically; anywhere else point any external cron
-at that URL.
+On Vercel, `vercel.json` schedules `0 22 * * *` — daily at 06:00 Asia/Manila, because Vercel Hobby
+rejects hourly crons. Anywhere else, point any external cron at that URL.
 
 ### Live instant estimate on the public site
 
