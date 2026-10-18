@@ -21,7 +21,9 @@ tsconfig.tsbuildinfo
 .env.production
 
 # drizzle
-/drizzle/meta
+# `drizzle/meta` is committed on purpose: it holds the migration journal that
+# `drizzle-kit migrate` replays. Gitignoring it makes migrations unreproducible
+# on any other checkout.
 
 # misc
 .DS_Store
@@ -31,3 +33,4 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 coverage
+.neon
