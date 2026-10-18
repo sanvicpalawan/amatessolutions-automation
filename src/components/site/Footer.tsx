@@ -6,6 +6,7 @@ import { WARRANTY_TERMS } from "@/lib/knowledge";
 import { SocialIcon } from "@/lib/social";
 import type { NavItem, SocialLink } from "@/db/schema";
 import type { SiteContent } from "@/lib/site";
+import { isPlaceholderWhatsapp, isPlaceholderWhatsappUrl, whatsappDigits } from "@/lib/whatsapp-link";
 
 export default function Footer({
   content,
@@ -18,7 +19,10 @@ export default function Footer({
 }) {
   const footerNav = nav.filter((item) => item.location === "footer" && item.enabled);
   const groups = Array.from(new Set(footerNav.map((item) => item.group || "Company")));
-  const footerSocial = social.filter((item) => item.location === "footer" && item.enabled);
+  const showWhatsapp = !isPlaceholderWhatsapp(content.footerWhatsapp);
+  const footerSocial = social.filter(
+    (item) => item.location === "footer" && item.enabled && !isPlaceholderWhatsappUrl(item.url),
+  );
 
   return (
     <footer className="bg-navy-950 pt-16 text-slate-400">
@@ -68,16 +72,18 @@ export default function Footer({
                   {content.footerEmail}
                 </a>
               </li>
-              <li>
-                <a
-                  className="transition hover:text-solar-300"
-                  href={`https://wa.me/${content.footerWhatsapp.replace(/[^0-9]/g, "")}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  WhatsApp {content.footerWhatsapp}
-                </a>
-              </li>
+              {showWhatsapp ? (
+                <li>
+                  <a
+                    className="transition hover:text-solar-300"
+                    href={`https://wa.me/${whatsappDigits(content.footerWhatsapp)}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    WhatsApp {content.footerWhatsapp}
+                  </a>
+                </li>
+              ) : null}
               <li>{content.footerAddress}</li>
               <li>
                 <Link className="transition hover:text-solar-300" href="/blog">

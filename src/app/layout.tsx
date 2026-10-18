@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 import ThemeStyles from "@/components/site/ThemeStyles";
+import WhatsAppButton from "@/components/site/WhatsAppButton";
 import { loadContent, loadTheme } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       </head>
       <body className="min-h-screen bg-white text-navy-900 antialiased">
         {children}
+        <WhatsAppButton number={content.footerWhatsapp} />
         <span hidden data-site-name={content.siteName} />
       </body>
     </html>

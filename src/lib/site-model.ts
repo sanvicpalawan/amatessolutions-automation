@@ -300,7 +300,7 @@ export const DEFAULT_CONTENT: SiteContent = {
   footerAbout:
     "Reliable energy. Smart choice. High-resilience solar hybrid systems designed, installed and monitored across Palawan, Philippines.",
   footerEmail: "hello@amatessolutions.com",
-  footerWhatsapp: "+63 917 123 4567",
+  footerWhatsapp: "",
   footerAddress: "Palawan, Philippines",
   footerCopyright: "© {year} Amates Solutions. All rights reserved.",
   footerTermsHeading: "Warranty & monitoring terms",

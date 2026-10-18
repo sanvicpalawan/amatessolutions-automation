@@ -247,7 +247,51 @@ export const blogPosts = pgTable(
   (table) => [uniqueIndex("blog_posts_slug_unique").on(table.slug)],
 );
 
+/**
+ * "David's Notes" — the shared workspace for the owner and his business
+ * partners. One note carries the written update plus any number of reference
+ * links and images uploaded straight from a device. Partners reply underneath.
+ *
+ * Deliberately not a blog post: blog posts are public marketing copy with a
+ * publish workflow, whereas these are internal working notes visible only
+ * behind the backoffice login.
+ */
+export const notes = pgTable(
+  "notes",
+  {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull().default(""),
+    body: text("body").notNull().default(""),
+    /** Any number of reference links, stored as a plain URL array. */
+    urls: jsonb("urls").notNull().default([]),
+    /** `media_assets.id` values, in the order the owner attached them. */
+    mediaIds: jsonb("media_ids").notNull().default([]),
+    author: text("author").notNull().default("David"),
+    pinned: boolean("pinned").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("notes_created_idx").on(table.createdAt)],
+);
+
+/** Replies on a note. Anyone signed into the backoffice can comment. */
+export const noteComments = pgTable(
+  "note_comments",
+  {
+    id: serial("id").primaryKey(),
+    noteId: integer("note_id")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    author: text("author").notNull().default("Partner"),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("note_comments_note_idx").on(table.noteId)],
+);
+
 export type MediaAsset = typeof mediaAssets.$inferSelect;
+export type NoteRow = typeof notes.$inferSelect;
+export type NoteComment = typeof noteComments.$inferSelect;
 export type NavItem = typeof navItems.$inferSelect;
 export type SocialLink = typeof socialLinks.$inferSelect;
 export type BlogPost = typeof blogPosts.$inferSelect;
