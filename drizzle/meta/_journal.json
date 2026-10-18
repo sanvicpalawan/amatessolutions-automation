@@ -8,6 +8,13 @@
       "when": 1792302107867,
       "tag": "0000_normal_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792310108385,
+      "tag": "0001_vengeful_anthem",
+      "breakpoints": true
     }
   ]
 }

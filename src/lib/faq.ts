@@ -14,7 +14,7 @@ import "server-only";
 import { buildKnowledgeDocument, ENERGY_ASSUMPTIONS, PALAWAN_LOCATIONS } from "@/lib/knowledge";
 import { chat } from "@/lib/openrouter";
 import { php } from "@/lib/roi";
-import type { Lead } from "@/db/schema";
+import type { Lead, Message } from "@/db/schema";
 
 export type FaqAnswer = {
   answer: string;
@@ -104,13 +104,15 @@ function systemPrompt(): string {
     "- Any price you give is guidance only and must point to the free site audit for a firm figure.",
     "- If the customer has given their own numbers, use them rather than generic examples.",
     "- Never claim an appointment has been booked, a crew scheduled, or a message delivered. You do not have that information.",
+    "- Anything in the history marked [NOT DELIVERED] never reached the customer. Never refer to it as though they saw it.",
+    "- Do not repeat an estimate or an answer the history shows you already gave; build on it instead.",
     "",
     "REFERENCE MATERIAL:",
     buildKnowledgeDocument(),
   ].join("\n");
 }
 
-function userPrompt(question: string, lead?: Lead): string {
+function userPrompt(question: string, lead?: Lead, history?: Message[]): string {
   const lines = [`Customer question: ${question}`];
   if (lead) {
     lines.push(
@@ -124,14 +126,40 @@ function userPrompt(question: string, lead?: Lead): string {
       `- Monthly bill: ${lead.monthlyBillPhp ?? "not stated"} PHP`,
     );
   }
+  lines.push(...threadBlock(history ?? []));
   return lines.join("\n");
 }
 
-export async function answerQuestion(question: string, lead?: Lead): Promise<FaqAnswer> {
+/**
+ * The recent thread, oldest first.
+ *
+ * Replies that were never delivered are marked as such: a skip means the
+ * customer has not seen that text, and the model must not treat it as something
+ * they were already told.
+ */
+function threadBlock(history: Message[]): string[] {
+  if (history.length === 0) return [];
+  const lines = ["", "The conversation so far, oldest first:"];
+  for (const message of history.slice(-8)) {
+    const who = message.direction === "inbound" ? "Customer" : "Us";
+    const body = message.body.replace(/\s+/g, " ").slice(0, 400);
+    const mark = message.deliveryStatus === "sent" || message.direction === "inbound"
+      ? ""
+      : ` [NOT DELIVERED: ${message.deliveryStatus}]`;
+    lines.push(`${who}: ${body}${mark}`);
+  }
+  return lines;
+}
+
+export async function answerQuestion(
+  question: string,
+  lead?: Lead,
+  history?: Message[],
+): Promise<FaqAnswer> {
   const result = await chat(
     [
       { role: "system", content: systemPrompt() },
-      { role: "user", content: userPrompt(question, lead) },
+      { role: "user", content: userPrompt(question, lead, history) },
     ],
     undefined,
   );

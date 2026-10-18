@@ -1,8 +1,14 @@
 import { after } from "next/server";
 
 import { db } from "@/db";
-import { leads } from "@/db/schema";
+import { leads, type Lead } from "@/db/schema";
 import { normalizeLead, parseWhatsappMessage } from "@/lib/leads";
+import {
+  alreadySeen,
+  absorbNewFacts,
+  findOpenLeadByPhone,
+  logMessage,
+} from "@/lib/conversation";
 import {
   buildAutoReply,
   replyToQuestion,
@@ -35,20 +41,29 @@ type MetaWebhook = {
     changes?: Array<{
       value?: {
         contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
-        messages?: Array<{ from?: string; text?: { body?: string } }>;
+        /** `id` is the WAMID, our only defence against Meta's webhook retries. */
+        messages?: Array<{ id?: string; from?: string; text?: { body?: string } }>;
       };
     }>;
   }>;
   from?: string;
   text?: string;
+  /** Set by our own callers so a replayed request is not processed twice. */
+  id?: string;
 };
 
 /**
  * POST /api/webhook/whatsapp
- * Accepts either a Meta Cloud API payload or a simple { from, text } body,
- * parses the message, writes it into the unified `leads` table, and — when
- * WhatsApp credentials are configured — actually answers the guest: an instant
- * ROI acknowledgement, plus a knowledge-base answer if they asked a question.
+ *
+ * Accepts either a Meta Cloud API payload or a simple { from, text } body, then
+ * continues the conversation that number belongs to and answers it.
+ *
+ * Two behaviours matter here:
+ *  - A message from a known number continues the existing lead rather than
+ *    creating another one, and the reply is grounded in the history.
+ *  - The full intake pipeline (instant estimate, proposal, audit booking) runs
+ *    only for a brand-new lead. Re-running it on every message would re-send the
+ *    estimate and, worse, book a duplicate audit appointment each time.
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as MetaWebhook;
@@ -58,9 +73,16 @@ export async function POST(request: Request) {
   const from = metaMessage?.from ?? body.from ?? "";
   const text = metaMessage?.text?.body ?? body.text ?? "";
   const profileName = change?.contacts?.[0]?.profile?.name;
+  const externalId = metaMessage?.id ?? body.id ?? null;
 
   if (!from || !text) {
     return Response.json({ ok: false, error: "Missing `from` or `text`" }, { status: 400 });
+  }
+
+  // Meta re-delivers anything it thinks failed. Before this, each retry became
+  // another lead and another reply to the same person.
+  if (await alreadySeen(externalId)) {
+    return Response.json({ ok: true, duplicate: true, externalId });
   }
 
   const normalizedFrom = from.startsWith("+") ? from : `+${from.replace(/[^0-9]/g, "")}`;
@@ -72,22 +94,41 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, errors: result.errors }, { status: 422 });
   }
 
-  const [row] = await db.insert(leads).values(result.lead).returning({ id: leads.id });
+  const existing = await findOpenLeadByPhone(normalizedFrom);
+  const isNewLead = existing === null;
 
-  // Reply instantly with the estimate, then do the real delivery in the background.
-  const lead = { ...result.lead, id: row.id } as Parameters<typeof runIntakeAutomations>[0];
+  let lead: Lead;
+  if (existing) {
+    // A returning guest often only reveals the property and the load on the
+    // second message, so fill the gaps without overwriting what we know.
+    lead = await absorbNewFacts(existing, result.lead as Partial<Lead>);
+  } else {
+    const [row] = await db.insert(leads).values(result.lead).returning();
+    lead = row;
+  }
+
+  await logMessage({
+    leadId: lead.id,
+    direction: "inbound",
+    channel: "whatsapp",
+    body: text,
+    deliveryStatus: "received",
+    externalId,
+    meta: { profileName: profileName ?? null, isNewLead },
+  });
+
   const roi = computeRoi(lead);
   const reply = buildAutoReply(lead, roi, scoreLead(lead));
   const question = looksLikeQuestion(text) ? text : null;
 
   // Meta wants a fast 200 and retries anything slower, so nothing is sent inline.
-  // The acknowledgement fires in the first second of `runIntakeAutomations`;
-  // the FAQ answer lands whenever the model answers. Running them together means
-  // the guest gets the estimate first and the answer as soon as it is ready,
-  // rather than waiting behind proposal generation.
+  // On a first message the acknowledgement fires in the first second of
+  // `runIntakeAutomations`; the FAQ answer lands whenever the model answers.
+  // Running them together means the guest gets the estimate first and the answer
+  // as soon as it is ready, rather than waiting behind proposal generation.
   after(async () => {
     const [pipeline, faq] = await Promise.allSettled([
-      runIntakeAutomations(lead),
+      isNewLead ? runIntakeAutomations(lead) : Promise.resolve(null),
       question ? replyToQuestion(lead, question) : Promise.resolve(null),
     ]);
 
@@ -101,11 +142,12 @@ export async function POST(request: Request) {
 
   return Response.json({
     ok: true,
-    leadId: row.id,
+    leadId: lead.id,
+    isNewLead,
     parsed: {
-      propertyType: result.lead.propertyType,
-      location: result.lead.location,
-      gridState: result.lead.gridState,
+      propertyType: lead.propertyType,
+      location: lead.location,
+      gridState: lead.gridState,
     },
     instantEstimate: {
       systemSizeKw: roi.systemSizeKw,

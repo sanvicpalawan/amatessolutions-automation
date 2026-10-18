@@ -77,6 +77,38 @@ export const proposals = pgTable(
   (table) => [index("proposals_lead_idx").on(table.leadId)],
 );
 
+/**
+ * Conversation log: every inbound customer message, and every reply we sent or
+ * could not send.
+ *
+ * This is what gives the agent memory. Without it each WhatsApp message created
+ * a brand-new lead, so a guest who sent three messages became three unrelated
+ * leads and the agent had no history to answer from.
+ */
+export const messages = pgTable(
+  "messages",
+  {
+    id: serial("id").primaryKey(),
+    leadId: integer("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    /** "inbound" = from the customer, "outbound" = from us (agent or staff). */
+    direction: text("direction").notNull(),
+    channel: text("channel").notNull().default("whatsapp"),
+    body: text("body").notNull().default(""),
+    /** What actually happened: received | sent | skipped | error. Never aspirational. */
+    deliveryStatus: text("delivery_status").notNull().default("received"),
+    /** WhatsApp WAMID. Unique so a Meta webhook retry cannot double-log a message. */
+    externalId: text("external_id"),
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("messages_lead_idx").on(table.leadId),
+    uniqueIndex("messages_external_unique").on(table.externalId),
+  ],
+);
+
 /** Booking calendar: site audits then crew dispatch. */
 export const appointments = pgTable(
   "appointments",
@@ -224,6 +256,8 @@ export type User = typeof users.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
 export type Proposal = typeof proposals.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;
 export type Appointment = typeof appointments.$inferSelect;
 export type SystemRow = typeof systems.$inferSelect;
 export type Setting = typeof settings.$inferSelect;

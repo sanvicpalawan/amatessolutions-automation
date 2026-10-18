@@ -12,6 +12,8 @@ import {
   type Lead,
 } from "@/db/schema";
 import { generateProposal } from "@/lib/agent";
+import { logMessage, conversationHistory } from "@/lib/conversation";
+import { emailConfigured, sendEmail } from "@/lib/email";
 import { answerQuestion } from "@/lib/faq";
 import { php, type RoiModel } from "@/lib/roi";
 import { sendWhatsappText, whatsappConfigured } from "@/lib/whatsapp";
@@ -361,55 +363,101 @@ export type AutomationOutcome = {
 };
 
 /**
- * Delivers a free-form WhatsApp reply and describes exactly what happened.
+ * Delivers a reply to the lead and describes exactly what happened.
  *
- * Free-form text is only permitted inside WhatsApp's 24-hour customer service
- * window — open for enquiries that arrived by WhatsApp, closed for web-form
- * leads until they message us. Those cases are reported as `skipped`, never as
- * sent, because an audit log that lies is worse than no audit log.
+ * WhatsApp first when it is allowed, because that is the channel the customer
+ * used. Free-form text is only permitted inside WhatsApp's 24-hour customer
+ * service window, and a web-form lead is always outside it — so email is tried
+ * next, and it is the only channel that can reach those leads.
+ *
+ * Every attempt is appended to the conversation thread with its real outcome.
+ * A message that never left is stored as `skipped`, never as `sent`.
  */
 type Delivery = {
   status: "ok" | "skipped" | "error";
   action: "sent" | "skipped";
   text: string;
+  /** Which channel actually carried it, when one did. */
+  channel: "whatsapp" | "email" | null;
   meta: Record<string, unknown>;
 };
 
-async function deliverToLead(lead: Lead, body: string): Promise<Delivery> {
-  if (!whatsappConfigured()) {
-    return {
-      status: "skipped",
-      action: "skipped",
-      text: "Not sent — WhatsApp is not configured (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID unset).",
-      meta: { reason: "not_configured" },
-    };
+async function deliverToLead(lead: Lead, body: string, subject: string): Promise<Delivery> {
+  const attempts: string[] = [];
+
+  // --- WhatsApp -----------------------------------------------------
+  if (lead.sourceChannel === "whatsapp") {
+    if (whatsappConfigured()) {
+      const result = await sendWhatsappText(lead.contactWhatsapp, body);
+      if (result.sent) {
+        const delivery: Delivery = {
+          status: "ok",
+          action: "sent",
+          channel: "whatsapp",
+          text: `Delivered on WhatsApp to ${result.to} (${result.messageId.slice(0, 28)}).`,
+          meta: { reason: "sent", messageId: result.messageId },
+        };
+        await logMessage({
+          leadId: lead.id,
+          direction: "outbound",
+          channel: "whatsapp",
+          body,
+          deliveryStatus: "sent",
+          externalId: result.messageId,
+          meta: { reason: "sent" },
+        });
+        return delivery;
+      }
+      attempts.push(`WhatsApp failed — ${result.detail}`);
+    } else {
+      attempts.push("WhatsApp not configured (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID unset)");
+    }
+  } else {
+    attempts.push(
+      `WhatsApp not applicable — arrived via ${lead.sourceChannel}, outside the 24-hour reply window`,
+    );
   }
 
-  if (lead.sourceChannel !== "whatsapp") {
-    return {
-      status: "skipped",
-      action: "skipped",
-      text: `Not sent to ${lead.contactWhatsapp}: arrived via ${lead.sourceChannel}, outside WhatsApp's 24-hour reply window. Needs an approved template.`,
-      meta: { reason: "outside_service_window", channel: lead.sourceChannel },
-    };
+  // --- Email --------------------------------------------------------
+  if (!lead.contactEmail) {
+    attempts.push("Email not possible — the lead gave no email address");
+  } else if (!emailConfigured()) {
+    attempts.push("Email not configured (EMAIL_API_KEY / EMAIL_FROM unset)");
+  } else {
+    const result = await sendEmail(lead.contactEmail, subject, body);
+    if (result.sent) {
+      const delivery: Delivery = {
+        status: "ok",
+        action: "sent",
+        channel: "email",
+        text: `Delivered by email to ${result.to} (${result.id.slice(0, 28)}).`,
+        meta: { reason: "sent", messageId: result.id },
+      };
+      await logMessage({
+        leadId: lead.id,
+        direction: "outbound",
+        channel: "email",
+        body,
+        deliveryStatus: "sent",
+        externalId: result.id,
+        meta: { reason: "sent", subject },
+      });
+      return delivery;
+    }
+    attempts.push(`Email failed — ${result.detail}`);
   }
 
-  const result = await sendWhatsappText(lead.contactWhatsapp, body);
-  if (result.sent) {
-    return {
-      status: "ok",
-      action: "sent",
-      text: `Delivered to ${result.to} (${result.messageId.slice(0, 28)}).`,
-      meta: { messageId: result.messageId, reason: "sent" },
-    };
-  }
+  const text = `Not delivered to ${lead.contactName}. ${attempts.join("; ")}.`;
+  await logMessage({
+    leadId: lead.id,
+    direction: "outbound",
+    channel: lead.sourceChannel === "whatsapp" ? "whatsapp" : "email",
+    body,
+    deliveryStatus: "skipped",
+    meta: { reason: "no_channel", attempts },
+  });
 
-  return {
-    status: result.reason === "outside_service_window" ? "skipped" : "error",
-    action: "skipped",
-    text: `NOT delivered to ${lead.contactWhatsapp} — ${result.detail}`,
-    meta: { reason: result.reason },
-  };
+  return { status: "skipped", action: "skipped", channel: null, text, meta: { attempts } };
 }
 
 function logStatus(delivery: Delivery): string {
@@ -432,12 +480,21 @@ export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcom
   // 1. Acknowledgement — actually delivered, and logged as it really went.
   if (await ruleEnabled("auto_reply")) {
     const body = buildAutoReply(lead, roi, score);
-    const delivery = await deliverToLead(lead, body);
+    const delivery = await deliverToLead(
+      lead,
+      body,
+      `Amates Solutions — your free solar audit for ${lead.location}`,
+    );
     outcomes.push({ rule: "auto_reply", status: delivery.status, message: delivery.text });
     await log("auto_reply", delivery.action, delivery.text, {
       targetId: lead.id,
       status: logStatus(delivery),
-      meta: { channel: lead.sourceChannel, ...delivery.meta, body: body.slice(0, 4000) },
+      meta: {
+        sourceChannel: lead.sourceChannel,
+        deliveredVia: delivery.channel,
+        ...delivery.meta,
+        body: body.slice(0, 4000),
+      },
     });
   } else {
     outcomes.push({ rule: "auto_reply", status: "skipped", message: "Rule disabled by owner." });
@@ -562,8 +619,11 @@ export async function replyToQuestion(lead: Lead, question: string): Promise<Aut
     return { rule: "whatsapp_faq", status: "skipped", message: "Rule disabled by owner." };
   }
 
-  const { answer, engine, model } = await answerQuestion(question, lead);
-  const delivery = await deliverToLead(lead, answer);
+  // Ground the answer in the actual thread. Without this the agent cannot follow
+  // "and what about the second building?" or notice it already quoted a price.
+  const history = await conversationHistory(lead.id);
+  const { answer, engine, model } = await answerQuestion(question, lead, history);
+  const delivery = await deliverToLead(lead, answer, "Re: your Amates Solutions enquiry");
   const message = `${engine === "openrouter" ? "AI" : "knowledge-base"} answer (${model}) — ${delivery.text}`;
 
   // The full question and answer are kept in `meta` so the owner can audit what
@@ -573,8 +633,10 @@ export async function replyToQuestion(lead: Lead, question: string): Promise<Aut
     status: logStatus(delivery),
     meta: {
       ...delivery.meta,
+      deliveredVia: delivery.channel,
       engine,
       model,
+      turns: history.length,
       question: question.slice(0, 500),
       answer: answer.slice(0, 4000),
     },
