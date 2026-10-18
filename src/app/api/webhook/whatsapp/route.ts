@@ -9,6 +9,7 @@ import {
   absorbNewFacts,
   findOpenLeadByPhone,
   logMessage,
+  recordDeliveryStatus,
 } from "@/lib/conversation";
 import {
   buildAutoReply,
@@ -43,6 +44,15 @@ type MetaWebhook = {
         contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
         /** `id` is the WAMID, our only defence against Meta's webhook retries. */
         messages?: Array<{ id?: string; from?: string; text?: { body?: string } }>;
+        /**
+         * Delivery receipts for messages we sent. Meta posts these to this same
+         * endpoint, so they must not be mistaken for a message with no body.
+         */
+        statuses?: Array<{
+          id?: string;
+          status?: string;
+          errors?: Array<{ code?: number; title?: string; message?: string }>;
+        }>;
       };
     }>;
   }>;
@@ -74,6 +84,20 @@ export async function POST(request: Request) {
   const text = metaMessage?.text?.body ?? body.text ?? "";
   const profileName = change?.contacts?.[0]?.profile?.name;
   const externalId = metaMessage?.id ?? body.id ?? null;
+
+  // Meta reports what became of our outbound messages on this same endpoint.
+  // These carries have no `from`/`text`, so before this they fell through to the
+  // guard below, were answered 400, and Meta retried every receipt.
+  if (change?.statuses?.length) {
+    let updated = 0;
+    for (const receipt of change.statuses) {
+      if (!receipt.id || !receipt.status) continue;
+      if (await recordDeliveryStatus(receipt.id, receipt.status, receipt.errors?.[0])) updated += 1;
+    }
+    if (!metaMessage && !body.text) {
+      return Response.json({ ok: true, statuses: change.statuses.length, updated });
+    }
+  }
 
   if (!from || !text) {
     return Response.json({ ok: false, error: "Missing `from` or `text`" }, { status: 400 });

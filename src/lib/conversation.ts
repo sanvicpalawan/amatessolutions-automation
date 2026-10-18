@@ -19,7 +19,15 @@ import { leads, messages, type Lead, type Message } from "@/db/schema";
 /** A closed deal must not swallow a fresh enquiry from the same number. */
 const TERMINAL_STATUSES = ["won", "lost"];
 
-export type DeliveryStatus = "received" | "sent" | "skipped" | "error";
+export type DeliveryStatus =
+  | "received"
+  | "sent"
+  /** Meta confirms the handset got it. `sent` alone does not mean that. */
+  | "delivered"
+  | "read"
+  | "failed"
+  | "skipped"
+  | "error";
 
 /** Digits only, so "+63 917 000 0000" and "639170000000" are the same person. */
 export function phoneKey(raw: string): string {
@@ -92,6 +100,38 @@ export async function logMessage(input: LoggedMessage): Promise<boolean> {
     .returning({ id: messages.id });
 
   return inserted.length > 0;
+}
+
+/**
+ * Applies a delivery receipt Meta posts for a message we sent.
+ *
+ * Meta accepts a send long before the handset receives it, and reports the truth
+ * separately: `sent`, then `delivered`, then `read` — or `failed` with a reason.
+ * Recording only the first of those made the log claim a customer had been told
+ * something they may never have seen.
+ */
+export async function recordDeliveryStatus(
+  wamid: string,
+  status: string,
+  failure?: { code?: number; title?: string; message?: string },
+): Promise<boolean> {
+  const known = ["sent", "delivered", "read", "failed"];
+  if (!known.includes(status)) return false;
+
+  const updated = await db
+    .update(messages)
+    .set({ deliveryStatus: status as DeliveryStatus })
+    .where(eq(messages.externalId, wamid))
+    .returning({ id: messages.id });
+
+  if (status === "failed") {
+    const reason = [failure?.code, failure?.title, failure?.message]
+      .filter((part) => part !== undefined && part !== "")
+      .join(" ");
+    console.error(`[whatsapp] ${wamid} failed to deliver — ${reason || "no reason given"}`);
+  }
+
+  return updated.length > 0;
 }
 
 /** The recent back-and-forth, oldest first, for grounding the next reply. */

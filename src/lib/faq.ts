@@ -143,9 +143,14 @@ function threadBlock(history: Message[]): string[] {
   for (const message of history.slice(-8)) {
     const who = message.direction === "inbound" ? "Customer" : "Us";
     const body = message.body.replace(/\s+/g, " ").slice(0, 400);
-    const mark = message.deliveryStatus === "sent" || message.direction === "inbound"
-      ? ""
-      : ` [NOT DELIVERED: ${message.deliveryStatus}]`;
+    // A receipt of `delivered`/`read` means the customer really did see it, so
+    // only the outcomes that mean "they never got this" are flagged.
+    const seen =
+      message.direction === "inbound" ||
+      message.deliveryStatus === "sent" ||
+      message.deliveryStatus === "delivered" ||
+      message.deliveryStatus === "read";
+    const mark = seen ? "" : ` [NOT DELIVERED: ${message.deliveryStatus}]`;
     lines.push(`${who}: ${body}${mark}`);
   }
   return lines;
