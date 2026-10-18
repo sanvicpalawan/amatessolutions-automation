@@ -124,12 +124,12 @@ string interpolation anywhere.
 | `automation_rules` | Owner-configurable automation switches |
 | `automation_log` | Append-only audit trail of automated actions |
 
-## 3. Environment variables (`.env` only)
+## 3. Environment variables
 
 | Key | Required | Notes |
 | --- | -------- | ----- |
 | `DATABASE_URL` | yes | Neon Postgres connection string |
-| `OPENROUTER_API_KEY` | no* | **Backend only.** Without it the agent uses the deterministic ROI engine |
+| `OPENROUTER_API_KEY` | no | **Backend only.** Optional — the same key can be pasted in `/admin/settings`, where it is stored encrypted in Postgres. When this env var is set it **takes precedence** over the stored one. With no key anywhere, the agent falls back to the deterministic ROI engine |
 | `OPENROUTER_SITE_URL` / `OPENROUTER_SITE_NAME` | no | Sent as OpenRouter attribution headers |
 | `ADMIN_PASSKEY` | no | Backoffice passkey (default `5309`). **Build phase only** — see Security notes |
 | `ADMIN_COOKIE_SECURE` | no | Force the `Secure` flag on the session cookie. Defaults to `true` only when the app is served over HTTPS |
@@ -214,6 +214,15 @@ ever imports it. `src/lib/agent.ts` combines:
 
 If OpenRouter is unreachable the endpoint still returns a complete proposal from the deterministic
 engine and flags `engine: "deterministic"`.
+
+### Setting the OpenRouter key without a redeploy
+
+The key can be entered at **`/admin/settings` → OpenRouter API key**. It is stored in the `settings`
+table as AES-256-GCM ciphertext (`src/lib/secrets.ts`, key derived from `ADMIN_SESSION_SECRET`); the
+browser only ever receives a masked preview. **`OPENROUTER_API_KEY` wins when set**, so production
+can stay env-driven while the build phase is admin-driven. Clearing the field deletes only the stored
+key — the env var is untouched. Rotating `ADMIN_SESSION_SECRET` invalidates stored keys; re-enter
+them.
 
 ```bash
 # Protected: session cookie, or x-api-key matching AGENT_API_KEY
