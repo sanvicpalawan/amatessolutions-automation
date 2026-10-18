@@ -5,7 +5,7 @@ export const maxDuration = 120;
 
 /**
  * POST /api/cron/sweep
- * Intended to be called hourly by Vercel Cron (see vercel.json) or any
+ * Intended to be called on a schedule by Vercel Cron (see vercel.json) or any
  * external scheduler. Protected by the CRON_SECRET bearer token.
  */
 export async function GET(request: Request) {

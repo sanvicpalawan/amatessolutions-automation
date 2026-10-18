@@ -131,7 +131,7 @@ string interpolation anywhere.
 | `AGENT_API_KEY` | no | Allows `x-api-key` machine access to `POST /api/quote/generate` |
 | `WHATSAPP_VERIFY_TOKEN` | no | Meta webhook verification handshake |
 | `CREW_DISPATCH_WEBHOOK_URL` | no | POSTed when a booking is dispatched |
-| `CRON_SECRET` | no | Bearer token protecting `POST /api/cron/sweep` (Vercel Cron sends it automatically) |
+| `CRON_SECRET` | yes | Bearer token protecting `POST /api/cron/sweep`. Vercel Cron sends it automatically when the variable is set; without it the endpoint is unauthenticated. |
 
 `.env`, `.next`, and `node_modules` are git-ignored. No variable is prefixed with `NEXT_PUBLIC_`,
 so **no secret can reach the browser bundle**.
@@ -282,7 +282,7 @@ instant auto-reply, so prospects are pre-qualified before a human opens the CRM.
 | `GET` | `/api/systems` | admin | Monitoring fleet + summary |
 | `GET/PUT` | `/api/settings/openrouter` | admin | Model selectors |
 | `GET/PUT/POST` | `/api/automations` | admin | List/toggle rules, run sweep |
-| `GET/POST` | `/api/cron/sweep` | `CRON_SECRET` | Hourly fleet + SLA sweep |
+| `GET/POST` | `/api/cron/sweep` | `CRON_SECRET` | Daily fleet + SLA sweep (06:00 Asia/Manila) |
 | `GET/POST` | `/api/webhook/whatsapp` | public | Verification + inbound messages |
 
 ## 10. Icons
