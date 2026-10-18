@@ -227,6 +227,7 @@ export async function recentLog(limit = 40) {
     targetId: row.targetId,
     status: row.status,
     message: row.message,
+    meta: row.meta,
     createdAt: row.createdAt.toISOString(),
   }));
 }
@@ -430,12 +431,13 @@ export async function runIntakeAutomations(lead: Lead): Promise<AutomationOutcom
 
   // 1. Acknowledgement — actually delivered, and logged as it really went.
   if (await ruleEnabled("auto_reply")) {
-    const delivery = await deliverToLead(lead, buildAutoReply(lead, roi, score));
+    const body = buildAutoReply(lead, roi, score);
+    const delivery = await deliverToLead(lead, body);
     outcomes.push({ rule: "auto_reply", status: delivery.status, message: delivery.text });
     await log("auto_reply", delivery.action, delivery.text, {
       targetId: lead.id,
       status: logStatus(delivery),
-      meta: { channel: lead.sourceChannel, ...delivery.meta },
+      meta: { channel: lead.sourceChannel, ...delivery.meta, body: body.slice(0, 4000) },
     });
   } else {
     outcomes.push({ rule: "auto_reply", status: "skipped", message: "Rule disabled by owner." });
@@ -564,10 +566,18 @@ export async function replyToQuestion(lead: Lead, question: string): Promise<Aut
   const delivery = await deliverToLead(lead, answer);
   const message = `${engine === "openrouter" ? "AI" : "knowledge-base"} answer (${model}) — ${delivery.text}`;
 
+  // The full question and answer are kept in `meta` so the owner can audit what
+  // the agent actually told a guest, not just that it tried.
   await log("whatsapp_faq", delivery.action, message, {
     targetId: lead.id,
     status: logStatus(delivery),
-    meta: { ...delivery.meta, engine, model, question: question.slice(0, 300) },
+    meta: {
+      ...delivery.meta,
+      engine,
+      model,
+      question: question.slice(0, 500),
+      answer: answer.slice(0, 4000),
+    },
   });
 
   return { rule: "whatsapp_faq", status: delivery.status, message };
