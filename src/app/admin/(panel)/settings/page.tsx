@@ -1,5 +1,6 @@
 import OpenRouterConfig from "@/components/admin/OpenRouterConfig";
 import PageHeader from "@/components/admin/PageHeader";
+import WhatsappConfig from "@/components/admin/WhatsappConfig";
 import { describeDatabase } from "@/lib/neon";
 
 export const dynamic = "force-dynamic";
@@ -11,11 +12,15 @@ export default async function SettingsPage() {
     <div className="max-w-4xl">
       <PageHeader
         eyebrow="Configuration"
-        title="OpenRouter & environment"
-        description="Backend-only AI configuration. Keys live in .env and never reach the browser."
+        title="WhatsApp, OpenRouter & environment"
+        description="Credentials for the channels the agent uses. Anything secret is encrypted at rest and never sent to the browser."
       />
 
-      <OpenRouterConfig />
+      <WhatsappConfig />
+
+      <div className="mt-6">
+        <OpenRouterConfig />
+      </div>
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-sm font-bold uppercase tracking-wider text-navy-900">Database</h3>

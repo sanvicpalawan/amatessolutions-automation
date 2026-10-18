@@ -17,6 +17,8 @@
  */
 import "server-only";
 
+import { getStoredWhatsappToken, getWhatsappConfig } from "@/lib/settings";
+
 const DEFAULT_API_VERSION = "v26.0";
 /** Cloud API caps a text body at 4096 characters. */
 const MAX_BODY_CHARS = 4096;
@@ -35,20 +37,165 @@ export type SendOutcome =
 
 type Config = { token: string; phoneNumberId: string; version: string };
 
-function config(): Config | null {
-  const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+/** Where the live credential came from — surfaced in the admin screen. */
+export type CredentialSource = "env" | "admin" | "none";
+
+/**
+ * Resolves the sending credentials.
+ *
+ * The environment wins, so production stays env-driven; anything saved in the
+ * backoffice is the build-phase fallback. Same precedence rule as the OpenRouter
+ * key, so there is one thing to remember rather than two.
+ */
+export async function resolveConfig(): Promise<Config | null> {
+  const stored = await getWhatsappConfig();
+  const token =
+    process.env.WHATSAPP_ACCESS_TOKEN?.trim() || (await getStoredWhatsappToken())?.trim() || "";
+  const phoneNumberId =
+    process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || stored.phoneNumberId.trim();
+
   if (!token || !phoneNumberId) return null;
+
   return {
     token,
     phoneNumberId,
-    version: process.env.WHATSAPP_API_VERSION?.trim() || DEFAULT_API_VERSION,
+    version:
+      process.env.WHATSAPP_API_VERSION?.trim() || stored.apiVersion?.trim() || DEFAULT_API_VERSION,
   };
 }
 
-/** True when both the token and the sender phone-number ID are present. */
-export function whatsappConfigured(): boolean {
-  return config() !== null;
+/** True when a token and a sender phone-number ID are both available. */
+export async function whatsappConfigured(): Promise<boolean> {
+  return (await resolveConfig()) !== null;
+}
+
+async function activeToken(): Promise<string> {
+  return (
+    process.env.WHATSAPP_ACCESS_TOKEN?.trim() ||
+    (await getStoredWhatsappToken())?.trim() ||
+    ""
+  );
+}
+
+export async function tokenSource(): Promise<CredentialSource> {
+  if (process.env.WHATSAPP_ACCESS_TOKEN?.trim()) return "env";
+  return (await getStoredWhatsappToken())?.trim() ? "admin" : "none";
+}
+
+function mask(secret: string): string {
+  if (!secret) return "not set";
+  if (secret.length <= 10) return `${secret.slice(0, 2)}••••••`;
+  return `${secret.slice(0, 6)}${"•".repeat(14)}${secret.slice(-4)}`;
+}
+
+/** Never returns the raw token — only a masked preview for the admin screen. */
+export async function maskedToken(): Promise<string> {
+  return mask(await activeToken());
+}
+
+/** The token Meta must echo back during the webhook GET handshake. */
+export async function expectedVerifyToken(): Promise<string> {
+  const stored = await getWhatsappConfig();
+  return (
+    process.env.WHATSAPP_VERIFY_TOKEN?.trim() || stored.verifyToken?.trim() || "amates-verify"
+  );
+}
+
+export type WhatsappStatus = {
+  configured: boolean;
+  tokenSource: CredentialSource;
+  maskedToken: string;
+  phoneNumberId: string;
+  apiVersion: string;
+  verifyToken: string;
+  /** When true the value comes from the environment, so the admin field is inert. */
+  tokenFromEnv: boolean;
+  phoneFromEnv: boolean;
+  /** What is still missing, in the order the client should fix it. */
+  missing: string[];
+  webhookUrl: string;
+};
+
+export async function whatsappStatus(origin: string): Promise<WhatsappStatus> {
+  const stored = await getWhatsappConfig();
+  const tokenFromEnv = Boolean(process.env.WHATSAPP_ACCESS_TOKEN?.trim());
+  const phoneFromEnv = Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID?.trim());
+  const token = await activeToken();
+  const phoneNumberId =
+    process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || stored.phoneNumberId.trim();
+
+  const missing: string[] = [];
+  if (!token) missing.push("Access token");
+  if (!phoneNumberId) missing.push("Phone number ID");
+
+  return {
+    configured: missing.length === 0,
+    tokenSource: tokenFromEnv ? "env" : token ? "admin" : "none",
+    maskedToken: mask(token),
+    phoneNumberId,
+    apiVersion:
+      process.env.WHATSAPP_API_VERSION?.trim() || stored.apiVersion?.trim() || DEFAULT_API_VERSION,
+    verifyToken: await expectedVerifyToken(),
+    tokenFromEnv,
+    phoneFromEnv,
+    missing,
+    webhookUrl: `${origin.replace(/\/$/, "")}/api/webhook/whatsapp`,
+  };
+}
+
+export type VerifyOutcome =
+  | { ok: true; displayPhoneNumber: string; verifiedName: string; qualityRating?: string }
+  | { ok: false; detail: string };
+
+/**
+ * Asks Meta about the sending number, which confirms the token and the
+ * phone-number ID are a working pair.
+ *
+ * Deliberately a read, not a test send: free-form text may only be sent to
+ * someone who messaged us in the last 24 hours, so a test send to an arbitrary
+ * number comes back as error 131047 and makes working credentials look broken.
+ */
+export async function verifyCredentials(): Promise<VerifyOutcome> {
+  const cfg = await resolveConfig();
+  if (!cfg) {
+    return {
+      ok: false,
+      detail: "Not configured yet — set the access token and the phone number ID first.",
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/${cfg.version}/${cfg.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`,
+      { headers: { Authorization: `Bearer ${cfg.token}` }, cache: "no-store" },
+    );
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      display_phone_number?: string;
+      verified_name?: string;
+      quality_rating?: string;
+      error?: { message?: string; code?: number };
+    };
+
+    if (!response.ok) {
+      const code = payload.error?.code;
+      return {
+        ok: false,
+        detail: `Meta rejected these credentials (HTTP ${response.status}${
+          code ? `, code ${code}` : ""
+        }): ${payload.error?.message ?? "unknown error"}`,
+      };
+    }
+
+    return {
+      ok: true,
+      displayPhoneNumber: payload.display_phone_number ?? "unknown",
+      verifiedName: payload.verified_name ?? "unknown",
+      qualityRating: payload.quality_rating,
+    };
+  } catch (error) {
+    return { ok: false, detail: `Could not reach Meta: ${(error as Error).message}` };
+  }
 }
 
 /**
@@ -60,13 +207,13 @@ export function normaliseRecipient(raw: string): string {
 }
 
 export async function sendWhatsappText(to: string, body: string): Promise<SendOutcome> {
-  const cfg = config();
+  const cfg = await resolveConfig();
   if (!cfg) {
     return {
       sent: false,
       reason: "not_configured",
       detail:
-        "WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID are not set, so nothing was sent.",
+        "No WhatsApp access token / phone number ID. Set them in the backoffice at /admin/settings, or as WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.",
     };
   }
 

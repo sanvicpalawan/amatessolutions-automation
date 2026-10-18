@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { db } from "@/db";
 import { leads, type Lead } from "@/db/schema";
 import { normalizeLead, parseWhatsappMessage } from "@/lib/leads";
+import { expectedVerifyToken } from "@/lib/whatsapp";
 import {
   alreadySeen,
   absorbNewFacts,
@@ -21,13 +22,13 @@ export const dynamic = "force-dynamic";
 /** Outbound replies and the proposal both run in `after()`, so allow for them. */
 export const maxDuration = 60;
 
-/** Meta-style verification handshake (stub). */
+/** Meta-style verification handshake. The token is env-first, else set in /admin/settings. */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("hub.mode");
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
-  const expected = process.env.WHATSAPP_VERIFY_TOKEN ?? "amates-verify";
+  const expected = await expectedVerifyToken();
 
   if (mode === "subscribe" && token === expected) {
     return new Response(challenge ?? "", { status: 200 });

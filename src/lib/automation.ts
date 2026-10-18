@@ -387,7 +387,7 @@ async function deliverToLead(lead: Lead, body: string, subject: string): Promise
 
   // --- WhatsApp -----------------------------------------------------
   if (lead.sourceChannel === "whatsapp") {
-    if (whatsappConfigured()) {
+    if (await whatsappConfigured()) {
       const result = await sendWhatsappText(lead.contactWhatsapp, body);
       if (result.sent) {
         const delivery: Delivery = {

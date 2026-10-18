@@ -12,6 +12,8 @@ export const SETTINGS_KEYS = {
   theme: "site_theme",
   siteContent: "site_content",
   openrouterApiKey: "openrouter_api_key",
+  whatsapp: "whatsapp_config",
+  whatsappAccessToken: "whatsapp_access_token",
 } as const;
 
 export type OpenRouterConfig = {
@@ -95,17 +97,15 @@ export function saveModelCache(cache: ModelCache): Promise<void> {
  * ------------------------------------------------------------------ */
 
 /**
- * The key saved through /admin/settings, or null when unset.
- * Returns null (rather than throwing) if the ciphertext cannot be
- * decrypted, so a rotated secret degrades to "key missing".
+ * A secret saved through /admin/settings, or null when unset.
+ *
+ * Returns null (rather than throwing) if the ciphertext cannot be decrypted, so
+ * a rotated `ADMIN_SESSION_SECRET` degrades to "not set" instead of breaking the
+ * page that reads it.
  */
-export async function getStoredApiKey(): Promise<string | null> {
+async function getStoredSecret(key: string): Promise<string | null> {
   try {
-    const rows = await db
-      .select()
-      .from(settings)
-      .where(eq(settings.key, SETTINGS_KEYS.openrouterApiKey))
-      .limit(1);
+    const rows = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
     const value = rows[0]?.value as { ciphertext?: string } | undefined;
     return decryptSecret(value?.ciphertext);
   } catch {
@@ -113,14 +113,69 @@ export async function getStoredApiKey(): Promise<string | null> {
   }
 }
 
-export async function saveStoredApiKey(key: string): Promise<void> {
-  await writeSetting(SETTINGS_KEYS.openrouterApiKey, {
-    ciphertext: encryptSecret(key),
+async function saveStoredSecret(key: string, secret: string): Promise<void> {
+  await writeSetting(key, {
+    ciphertext: encryptSecret(secret),
     addedAt: new Date().toISOString(),
   });
 }
 
+async function clearStoredSecret(key: string): Promise<void> {
+  await db.delete(settings).where(eq(settings.key, key));
+}
+
+export function getStoredApiKey(): Promise<string | null> {
+  return getStoredSecret(SETTINGS_KEYS.openrouterApiKey);
+}
+
+export function saveStoredApiKey(key: string): Promise<void> {
+  return saveStoredSecret(SETTINGS_KEYS.openrouterApiKey, key);
+}
+
 /** Removes the admin-stored key. An `OPENROUTER_API_KEY` env var is untouched. */
-export async function clearStoredApiKey(): Promise<void> {
-  await db.delete(settings).where(eq(settings.key, SETTINGS_KEYS.openrouterApiKey));
+export function clearStoredApiKey(): Promise<void> {
+  return clearStoredSecret(SETTINGS_KEYS.openrouterApiKey);
+}
+
+/* ------------------------------------------------------------------ *
+ * WhatsApp Cloud API settings
+ * ------------------------------------------------------------------ */
+
+/**
+ * Non-secret WhatsApp settings. The access token is deliberately *not* here —
+ * it is a credential and is stored encrypted under its own settings key.
+ */
+export type WhatsappConfig = {
+  /** The *sending* number's numeric ID from Meta, not the phone number itself. */
+  phoneNumberId: string;
+  /** Echoed back by Meta during the webhook GET handshake. */
+  verifyToken: string;
+  apiVersion: string;
+};
+
+export const DEFAULT_WHATSAPP_CONFIG: WhatsappConfig = {
+  phoneNumberId: "",
+  verifyToken: "amates-verify",
+  apiVersion: "v26.0",
+};
+
+export function getWhatsappConfig(): Promise<WhatsappConfig> {
+  return readSetting(SETTINGS_KEYS.whatsapp, DEFAULT_WHATSAPP_CONFIG);
+}
+
+export function saveWhatsappConfig(config: WhatsappConfig): Promise<void> {
+  return writeSetting(SETTINGS_KEYS.whatsapp, config);
+}
+
+export function getStoredWhatsappToken(): Promise<string | null> {
+  return getStoredSecret(SETTINGS_KEYS.whatsappAccessToken);
+}
+
+export function saveStoredWhatsappToken(token: string): Promise<void> {
+  return saveStoredSecret(SETTINGS_KEYS.whatsappAccessToken, token);
+}
+
+/** Removes the admin-stored token. A `WHATSAPP_ACCESS_TOKEN` env var is untouched. */
+export function clearStoredWhatsappToken(): Promise<void> {
+  return clearStoredSecret(SETTINGS_KEYS.whatsappAccessToken);
 }
