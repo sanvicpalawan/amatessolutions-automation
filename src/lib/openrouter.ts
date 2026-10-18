@@ -11,6 +11,7 @@ import "server-only";
 import {
   getModelCache,
   getOpenRouterConfig,
+  getStoredApiKey,
   saveModelCache,
   type CachedModel,
   type ModelCache,
@@ -18,25 +19,39 @@ import {
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 
-export function getApiKey(): string | undefined {
-  const key = process.env.OPENROUTER_API_KEY?.trim();
-  return key && key.length > 0 ? key : undefined;
+export type ApiKeySource = "env" | "admin" | "none";
+
+/**
+ * Resolves the OpenRouter key. The env var wins so production stays
+ * env-driven; the key saved in the backoffice is the build-phase fallback.
+ */
+export async function getApiKey(): Promise<string | undefined> {
+  const fromEnv = process.env.OPENROUTER_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+  const stored = await getStoredApiKey();
+  return stored?.trim() || undefined;
 }
 
-export function hasApiKey(): boolean {
-  return Boolean(getApiKey());
+export async function hasApiKey(): Promise<boolean> {
+  return Boolean(await getApiKey());
+}
+
+/** Where the active key came from — surfaced in the admin UI. */
+export async function apiKeySource(): Promise<ApiKeySource> {
+  if (process.env.OPENROUTER_API_KEY?.trim()) return "env";
+  return (await getStoredApiKey()) ? "admin" : "none";
 }
 
 /** Never returns the raw key — only a masked preview for the admin screen. */
-export function maskedApiKey(): string {
-  const key = getApiKey();
+export async function maskedApiKey(): Promise<string> {
+  const key = await getApiKey();
   if (!key) return "not set";
   if (key.length <= 10) return `${key.slice(0, 2)}••••••`;
   return `${key.slice(0, 6)}${"•".repeat(14)}${key.slice(-4)}`;
 }
 
-function headers(): Record<string, string> {
-  const key = getApiKey();
+async function headers(): Promise<Record<string, string>> {
+  const key = await getApiKey();
   return {
     "Content-Type": "application/json",
     ...(key ? { Authorization: `Bearer ${key}` } : {}),
@@ -54,12 +69,13 @@ type RawModel = {
 
 /** Fetches the live model catalogue and caches it in the `settings` table. */
 export async function refreshModels(): Promise<ModelCache> {
-  if (!hasApiKey()) {
+  if (!(await hasApiKey())) {
     const cache: ModelCache = {
       models: [],
       refreshedAt: new Date().toISOString(),
       green: false,
-      message: "OPENROUTER_API_KEY missing in .env — agent runs on the offline ROI engine.",
+      message:
+        "No OpenRouter key configured — the agent runs on the offline ROI engine. Add a key in the backoffice settings.",
     };
     await saveModelCache(cache);
     return cache;
@@ -67,7 +83,7 @@ export async function refreshModels(): Promise<ModelCache> {
 
   try {
     const response = await fetch(`${OPENROUTER_BASE}/models`, {
-      headers: headers(),
+      headers: await headers(),
       cache: "no-store",
     });
 
@@ -76,7 +92,7 @@ export async function refreshModels(): Promise<ModelCache> {
         models: [],
         refreshedAt: new Date().toISOString(),
         green: false,
-        message: `OpenRouter responded ${response.status}. Check the key in .env.`,
+        message: `OpenRouter responded ${response.status}. Check the API key in the backoffice settings.`,
       };
       await saveModelCache(cache);
       return cache;
@@ -116,9 +132,16 @@ export async function refreshModels(): Promise<ModelCache> {
   }
 }
 
-export async function modelStatus(): Promise<ModelCache & { keyConfigured: boolean; maskedKey: string }> {
-  const cache = await getModelCache();
-  return { ...cache, keyConfigured: hasApiKey(), maskedKey: maskedApiKey() };
+export async function modelStatus(): Promise<
+  ModelCache & { keyConfigured: boolean; maskedKey: string; keySource: ApiKeySource }
+> {
+  const [cache, keyConfigured, maskedKey, keySource] = await Promise.all([
+    getModelCache(),
+    hasApiKey(),
+    maskedApiKey(),
+    apiKeySource(),
+  ]);
+  return { ...cache, keyConfigured, maskedKey, keySource };
 }
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -133,14 +156,14 @@ export async function chat(messages: ChatMessage[], overrideModel?: string): Pro
   const model =
     overrideModel ?? (config.preferred === "paid" ? config.paidModel : config.freeModel);
 
-  if (!hasApiKey()) {
-    return { ok: false, model, error: "OPENROUTER_API_KEY is not configured in .env" };
+  if (!(await hasApiKey())) {
+    return { ok: false, model, error: "No OpenRouter API key configured in the backoffice settings" };
   }
 
   try {
     const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: "POST",
-      headers: headers(),
+      headers: await headers(),
       cache: "no-store",
       body: JSON.stringify({
         model,

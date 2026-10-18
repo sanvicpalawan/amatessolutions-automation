@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import ModelStatus from "@/components/admin/ModelStatus";
 
@@ -14,25 +14,75 @@ type Config = {
   siteTitle: string;
 };
 
+type KeySource = "env" | "admin" | "none";
+
 export default function OpenRouterConfig() {
   const [config, setConfig] = useState<Config | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [maskedKey, setMaskedKey] = useState("…");
   const [keyConfigured, setKeyConfigured] = useState(false);
+  const [keySource, setKeySource] = useState<KeySource>("none");
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
 
+  // API key entry
+  const [keyInput, setKeyInput] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyNote, setKeyNote] = useState("");
+
+  const apply = useCallback((payload: Record<string, unknown>) => {
+    setConfig(payload.config as Config);
+    setModels((payload.models as Model[]) ?? []);
+    setMaskedKey(payload.maskedKey as string);
+    setKeyConfigured(Boolean(payload.keyConfigured));
+    setKeySource((payload.keySource as KeySource) ?? "none");
+  }, []);
+
+  /** Called from event handlers after saving a key — never from the effect. */
+  const load = useCallback(async () => {
+    const response = await fetch("/api/settings/openrouter", { cache: "no-store" });
+    if (!response.ok) return;
+    apply((await response.json()) as Record<string, unknown>);
+  }, [apply]);
+
   useEffect(() => {
+    // Inlined on purpose: state is only set after the await, which keeps
+    // react-hooks/set-state-in-effect happy (see the rule's guidance).
     void (async () => {
       const response = await fetch("/api/settings/openrouter", { cache: "no-store" });
       if (!response.ok) return;
-      const payload = await response.json();
-      setConfig(payload.config as Config);
-      setModels((payload.models as Model[]) ?? []);
-      setMaskedKey(payload.maskedKey as string);
-      setKeyConfigured(Boolean(payload.keyConfigured));
+      apply((await response.json()) as Record<string, unknown>);
     })();
-  }, []);
+  }, [apply]);
+
+  async function putKey(apiKey: string) {
+    setKeyBusy(true);
+    setKeyNote("");
+    try {
+      const response = await fetch("/api/settings/openrouter", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey }),
+      });
+      const payload = await response.json();
+      setKeyNote(
+        response.ok
+          ? ((payload.keyMessage as string) ?? "Saved.")
+          : ((payload.error as string) ?? "Could not save the key."),
+      );
+      if (response.ok) {
+        setKeyInput("");
+        await load();
+      }
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function saveKey(event: React.FormEvent) {
+    event.preventDefault();
+    await putKey(keyInput);
+  }
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -54,34 +104,79 @@ export default function OpenRouterConfig() {
   const freeModels = models.filter((m) => m.free);
   const paidModels = models.filter((m) => !m.free);
 
+  const sourceLabel =
+    keySource === "env" ? "From environment" : keySource === "admin" ? "Stored in admin" : "Key missing";
+
   return (
     <div className="space-y-6">
       <ModelStatus onRefreshed={(list) => setModels(list)} />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <form onSubmit={saveKey} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-sm font-bold uppercase tracking-wider text-navy-900">
-          API key (read from .env only)
+          OpenRouter API key
         </h3>
+
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <code className="rounded-xl bg-slate-900 px-4 py-2.5 font-mono text-xs text-solar-300">
-            OPENROUTER_API_KEY = {maskedKey}
+            openrouter_api_key = {maskedKey}
           </code>
           <span
             className={`rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider ${
-              keyConfigured ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+              keyConfigured
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-red-100 text-red-700"
             }`}
           >
-            {keyConfigured ? "Key loaded" : "Key missing"}
+            {sourceLabel}
           </span>
         </div>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="min-w-[260px] flex-1">
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-navy-800">
+              Paste a key (starts with sk-or-)
+            </label>
+            <input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              placeholder="sk-or-v1-…"
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 font-mono text-sm"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={keyBusy || keyInput.trim() === ""}
+            className="rounded-full bg-navy-900 px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-white transition hover:bg-solar-500 hover:text-navy-950 disabled:opacity-50"
+          >
+            {keyBusy ? "Saving…" : "Save key"}
+          </button>
+
+          <button
+            type="button"
+            disabled={keyBusy || keySource !== "admin"}
+            onClick={() => void putKey("")}
+            className="rounded-full border border-slate-300 px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-navy-900 transition hover:border-red-300 hover:text-red-700 disabled:opacity-40"
+          >
+            Clear stored key
+          </button>
+        </div>
+
+        {keyNote ? <p className="mt-3 text-xs font-semibold text-navy-800">{keyNote}</p> : null}
+
         <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-          The key is never written to the database and never shipped to the browser. Edit it in the
-          server <code className="rounded bg-slate-100 px-1">.env</code> file
-          (<code className="rounded bg-slate-100 px-1">OPENROUTER_API_KEY=sk-or-...</code>) and
-          restart, then press <strong>Refresh models</strong>. Without a key the agent falls back to
-          the deterministic ROI engine.
+          A key saved here is written to Postgres <strong>encrypted</strong> (AES-256-GCM) and is
+          never sent to the browser — you only ever see the masked preview above. Handy while
+          building: no redeploy needed.
+          {keySource === "env"
+            ? " OPENROUTER_API_KEY is currently set in the environment, and it takes precedence over anything saved here."
+            : " If OPENROUTER_API_KEY is ever set in the environment, that value wins over this one."}{" "}
+          Without a key, the agent falls back to the deterministic ROI engine.
         </p>
-      </div>
+      </form>
 
       {config ? (
         <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -15,6 +15,7 @@ export async function GET() {
     green: status.green,
     keyConfigured: status.keyConfigured,
     maskedKey: status.maskedKey,
+    keySource: status.keySource,
     message: status.message,
     refreshedAt: status.refreshedAt,
     modelCount: status.models.length,

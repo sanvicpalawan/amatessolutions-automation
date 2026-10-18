@@ -4,12 +4,14 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { settings } from "@/db/schema";
+import { decryptSecret, encryptSecret } from "@/lib/secrets";
 
 export const SETTINGS_KEYS = {
   openrouter: "openrouter_config",
   modelCache: "openrouter_model_cache",
   theme: "site_theme",
   siteContent: "site_content",
+  openrouterApiKey: "openrouter_api_key",
 } as const;
 
 export type OpenRouterConfig = {
@@ -84,4 +86,39 @@ export function getModelCache(): Promise<ModelCache> {
 
 export function saveModelCache(cache: ModelCache): Promise<void> {
   return writeSetting(SETTINGS_KEYS.modelCache, cache);
+}
+
+/* ------------------------------------------------------------------ *
+ * Provider API keys — entered in the backoffice, encrypted at rest.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The key saved through /admin/settings, or null when unset.
+ * Returns null (rather than throwing) if the ciphertext cannot be
+ * decrypted, so a rotated secret degrades to "key missing".
+ */
+export async function getStoredApiKey(): Promise<string | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(settings)
+      .where(eq(settings.key, SETTINGS_KEYS.openrouterApiKey))
+      .limit(1);
+    const value = rows[0]?.value as { ciphertext?: string } | undefined;
+    return decryptSecret(value?.ciphertext);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveStoredApiKey(key: string): Promise<void> {
+  await writeSetting(SETTINGS_KEYS.openrouterApiKey, {
+    ciphertext: encryptSecret(key),
+    addedAt: new Date().toISOString(),
+  });
+}
+
+/** Removes the admin-stored key. An `OPENROUTER_API_KEY` env var is untouched. */
+export async function clearStoredApiKey(): Promise<void> {
+  await db.delete(settings).where(eq(settings.key, SETTINGS_KEYS.openrouterApiKey));
 }

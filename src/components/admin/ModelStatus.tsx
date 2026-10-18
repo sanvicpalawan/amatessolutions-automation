@@ -6,6 +6,7 @@ export type ModelStatusPayload = {
   green: boolean;
   keyConfigured: boolean;
   maskedKey: string;
+  keySource: "env" | "admin" | "none";
   message: string;
   refreshedAt: string | null;
   modelCount: number;
@@ -116,8 +117,11 @@ export default function ModelStatus({
       </dl>
 
       <p className="mt-3 text-[11px] text-slate-500">
-        The key is read from <code className="rounded bg-slate-100 px-1">.env</code> on the server
-        only — it is never sent to the browser, only this masked preview.
+        The key comes from{" "}
+        <code className="rounded bg-slate-100 px-1">
+          {status?.keySource === "env" ? ".env" : status?.keySource === "admin" ? "the backoffice" : "nowhere yet"}
+        </code>{" "}
+        on the server only — it is never sent to the browser, only this masked preview.
       </p>
     </div>
   );
