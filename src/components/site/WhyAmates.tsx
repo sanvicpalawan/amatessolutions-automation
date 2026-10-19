@@ -1,4 +1,4 @@
-import BlackoutScene from "@/components/site/BlackoutScene";
+import PowerFlowChart from "@/components/site/PowerFlowChart";
 import Reveal from "@/components/site/Reveal";
 import { Icon } from "@/lib/icons";
 import type { SiteContent } from "@/lib/site";
@@ -83,7 +83,7 @@ export default function WhyAmates({ content }: { content: SiteContent }) {
               <div className="absolute -left-5 -top-5 h-32 w-32 rounded-[1.75rem] border-2 border-solar-400/50" />
               <div className="absolute -bottom-6 -right-4 h-24 w-24 rounded-full bg-gradient-to-br from-solar-300/30 to-transparent blur-xl" />
 
-              <BlackoutScene />
+              <PowerFlowChart />
 
               {/* status card: static on mobile (avoids colliding with the
                   section below), floating from lg up */}
