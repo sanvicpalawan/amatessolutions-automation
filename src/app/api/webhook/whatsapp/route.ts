@@ -31,9 +31,15 @@ export async function GET(request: Request) {
   const challenge = url.searchParams.get("hub.challenge");
   const expected = await expectedVerifyToken();
 
-  if (mode === "subscribe" && token === expected) {
+  if (mode === "subscribe") {
+    // A wrong token is a refusal, not a hello. Returning 200 here told Meta the
+    // handshake succeeded even when it had not.
+    if (token !== expected) return new Response("Forbidden", { status: 403 });
     return new Response(challenge ?? "", { status: 200 });
   }
+
+  // A bare GET is someone (or an uptime check) looking at the URL, not Meta
+  // subscribing. Answer it, but never echo a challenge nobody asked for.
   return Response.json({ ok: true, service: "amates-whatsapp-webhook" });
 }
 

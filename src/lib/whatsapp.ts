@@ -24,6 +24,8 @@ const DEFAULT_API_VERSION = "v26.0";
 const MAX_BODY_CHARS = 4096;
 /** Meta's code for "more than 24h since the user's last message". */
 const RE_ENGAGEMENT_CODE = 131047;
+/** The free Meta test number only ever messages numbers on its own allow-list. */
+const NOT_ON_ALLOW_LIST_CODE = 131030;
 
 export type SendFailure =
   | "not_configured"
@@ -257,10 +259,20 @@ export async function sendWhatsappText(to: string, body: string): Promise<SendOu
       const reason: SendFailure =
         code === RE_ENGAGEMENT_CODE ? "outside_service_window" : "rejected";
       const detail = payload.error?.error_data?.details ?? payload.error?.message ?? "unknown error";
+      /**
+       * Meta phrases 131030 as "add recipient phone number to recipient list",
+       * which reads like something the developer forgot. It is not: it is the
+       * free test number refusing anyone who is not on its five-number
+       * allow-list, so say that plainly instead of leaving it a dead end.
+       */
+      const hint =
+        code === NOT_ON_ALLOW_LIST_CODE
+          ? " This is Meta's free test number: it can only message up to five numbers you add in Meta → WhatsApp → API Setup. Add this number there, or move to a real WhatsApp Business account."
+          : "";
       return {
         sent: false,
         reason,
-        detail: `WhatsApp ${response.status}${code ? ` (code ${code})` : ""}: ${detail}`,
+        detail: `WhatsApp ${response.status}${code ? ` (code ${code})` : ""}: ${detail}${hint}`,
       };
     }
 
