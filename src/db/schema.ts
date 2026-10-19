@@ -388,6 +388,89 @@ export const finExpenses = pgTable("fin_expenses", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* ------------------------------------------------------------------ *
+ * Solar catalogue
+ *
+ * The hardware we sell, what it costs us, and the packages we quote from.
+ * Specs and models came from the Deye + Jinko procurement workbook; prices
+ * there started as placeholders and every field is editable in the backoffice.
+ *
+ * Money is whole centavos, as everywhere else in the ledger.
+ * ------------------------------------------------------------------ */
+
+/** One piece of hardware. Inverters, panels, batteries, accessories. */
+export const solarProducts = pgTable(
+  "solar_products",
+  {
+    id: serial("id").primaryKey(),
+    brand: text("brand").notNull().default(""),
+    /** inverter | panel | battery | ess | microinverter | mounting | accessory | aircon */
+    category: text("category").notNull().default("accessory"),
+    model: text("model").notNull().default(""),
+    /** Rated power or capacity, as printed on the datasheet. */
+    headline: text("headline").notNull().default(""),
+    specs: text("specs").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    /** What it costs us. Never shown to a customer. */
+    costMinor: integer("cost_minor").notNull().default(0),
+    currency: text("currency").notNull().default("PHP"),
+    freightMinor: integer("freight_minor").notNull().default(0),
+    moq: integer("moq").notNull().default(1),
+    leadTime: text("lead_time").notNull().default(""),
+    supplier: text("supplier").notNull().default(""),
+    sourceUrl: text("source_url").notNull().default(""),
+    warranty: text("warranty").notNull().default(""),
+    availability: text("availability").notNull().default(""),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("solar_products_category_idx").on(table.category),
+    index("solar_products_brand_idx").on(table.brand),
+  ],
+);
+
+/**
+ * A quotable package.
+ *
+ * `fixed` is a concrete bill of materials with a customer price.
+ * `custom` is a recipe priced from `markupPct`, so it scales to any size.
+ */
+export const solarPackages = pgTable("solar_packages", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  sizeKwp: numeric("size_kwp", { precision: 8, scale: 2 }),
+  kind: text("kind").notNull().default("fixed"),
+  /** The customer price for a fixed tier. Ignored when kind is custom. */
+  sellPriceMinor: integer("sell_price_minor").notNull().default(0),
+  markupPct: numeric("markup_pct", { precision: 6, scale: 2 }).notNull().default("0"),
+  description: text("description").notNull().default(""),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One line of a package: either a catalogue product or a trade allowance. */
+export const solarPackageItems = pgTable(
+  "solar_package_items",
+  {
+    id: serial("id").primaryKey(),
+    packageId: integer("package_id")
+      .notNull()
+      .references(() => solarPackages.id, { onDelete: "cascade" }),
+    productId: integer("product_id").references(() => solarProducts.id, { onDelete: "set null" }),
+    label: text("label").notNull().default(""),
+    qty: numeric("qty", { precision: 10, scale: 2 }).notNull().default("1"),
+    /** each | per_kwp — per_kwp lines multiply by the job size. */
+    basis: text("basis").notNull().default("each"),
+    /** Used when there is no linked product: mounting, wiring, labour. */
+    unitCostMinor: integer("unit_cost_minor").notNull().default(0),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [index("solar_package_items_package_idx").on(table.packageId)],
+);
+
 export type MediaAsset = typeof mediaAssets.$inferSelect;
 export type NoteRow = typeof notes.$inferSelect;
 export type NoteComment = typeof noteComments.$inferSelect;

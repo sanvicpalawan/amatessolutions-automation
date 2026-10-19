@@ -29,6 +29,13 @@
       "when": 1792369122441,
       "tag": "0003_many_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792372409083,
+      "tag": "0004_jittery_fabian_cortez",
+      "breakpoints": true
     }
   ]
 }
