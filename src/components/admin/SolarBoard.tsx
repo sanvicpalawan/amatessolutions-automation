@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import RowField from "@/components/admin/RowField";
 import { Icon } from "@/lib/icons";
 import { money, percent, toMinor } from "@/lib/money";
 import {
@@ -118,6 +119,9 @@ const fieldClass =
   "mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 outline-none transition focus:border-solar-400 focus:ring-2 focus:ring-solar-400/30";
 const smallFieldClass =
   "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none transition focus:border-solar-400 focus:ring-2 focus:ring-solar-400/30";
+/** A line stacks on narrow screens, where position alone no longer names the field. */
+const lineCaptionClass =
+  "block text-[10px] font-bold uppercase tracking-wider text-slate-400 @3xl:hidden";
 const primaryButtonClass =
   "rounded-full bg-solar-400 px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-navy-950 transition hover:bg-solar-300 disabled:opacity-60";
 const ghostButtonClass =
@@ -390,10 +394,43 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
   }, [data.packages, productIndex]);
 
   const statCard = (label: string, value: string, hint: string) => (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1.5 text-xl font-extrabold tracking-tight text-navy-900">{value}</p>
-      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{hint}</p>
+      <p className="mt-1.5 text-base font-extrabold tracking-tight break-words text-navy-900 @xl:text-xl">
+        {value}
+      </p>
+      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        {hint}
+      </p>
+    </div>
+  );
+
+  /** The row actions, shared by the wide table and the narrow card. */
+  const productActions = (product: SolarProduct) => (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => void toggleProduct(product)}
+        className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-solar-400 hover:text-solar-600"
+      >
+        {product.active ? "Hide" : "Unhide"}
+      </button>
+      <button
+        type="button"
+        aria-label="Edit product"
+        onClick={() => editProduct(product)}
+        className={iconButtonClass}
+      >
+        <Icon name="Pencil" className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Delete product"
+        onClick={() => void removeRow("products", product.id, "product")}
+        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+      >
+        <Icon name="Trash2" className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 
@@ -430,7 +467,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
           </div>
         </section>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
           {statCard("Products", String(data.products.length), `${data.products.filter((p) => p.active).length} active`)}
           {statCard("Packages", String(data.packages.length), `${data.packages.filter((p) => p.active).length} active`)}
           {statCard(
@@ -759,7 +796,9 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
           ) : null}
         </div>
 
-        <div className="mt-4 overflow-x-auto">
+        {/* A real table once there is room, because aligned columns across rows
+            are the point. Below that, one card per product. */}
+        <div className="mt-4 hidden overflow-x-auto @4xl:block">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
@@ -800,31 +839,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                   <td className="px-4 py-3 text-xs text-slate-600">{product.supplier || "—"}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">{product.leadTime || "—"}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => void toggleProduct(product)}
-                        className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-solar-400 hover:text-solar-600"
-                      >
-                        {product.active ? "Hide" : "Unhide"}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Edit product"
-                        onClick={() => editProduct(product)}
-                        className={iconButtonClass}
-                      >
-                        <Icon name="Pencil" className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Delete product"
-                        onClick={() => void removeRow("products", product.id, "product")}
-                        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-                      >
-                        <Icon name="Trash2" className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <div className="flex justify-end">{productActions(product)}</div>
                   </td>
                 </tr>
               ))}
@@ -838,11 +853,89 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
             </tbody>
           </table>
         </div>
+
+        <ul className="mt-2 divide-y divide-slate-100 @4xl:hidden">
+          {filteredProducts.map((product) => (
+            <li key={product.id} className={`py-4 ${product.active ? "" : "opacity-50"}`}>
+              <p className="font-semibold break-words text-navy-900">{product.model}</p>
+              <p className="mt-0.5 text-xs break-words text-slate-500">
+                {product.brand}
+                {product.headline ? ` · ${product.headline}` : ""}
+              </p>
+              {/* On its own line: "Monitoring & accessory" is wide enough that
+                  sitting beside the name squeezes it to a few characters. */}
+              <span className="mt-1.5 inline-block rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                {CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ??
+                  product.category}
+              </span>
+
+              {product.specs ? (
+                <p className="mt-2 text-xs break-words text-slate-400">{product.specs}</p>
+              ) : null}
+
+              <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                <RowField label="Cost to us" value={money(product.costMinor, product.currency)} />
+                <RowField
+                  label="Freight"
+                  value={product.freightMinor > 0 ? money(product.freightMinor) : "—"}
+                  tone="muted"
+                />
+                <RowField label="Supplier" value={product.supplier || "—"} tone="muted" />
+                <RowField label="Lead time" value={product.leadTime || "—"} tone="muted" />
+              </dl>
+
+              <div className="mt-2.5">{productActions(product)}</div>
+            </li>
+          ))}
+          {filteredProducts.length === 0 && data.products.length > 0 ? (
+            <li className="py-10 text-center text-sm text-slate-500">Nothing matches that search.</li>
+          ) : null}
+        </ul>
       </section>
     </div>
   );
 
   /* ---------------- Packages ---------------- */
+
+  /** The kind pill, shown next to the package name at every width. */
+  const kindBadge = (pkg: SolarPackage) => (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+        pkg.kind === "custom" ? "bg-violet-100 text-violet-700" : "bg-sky-100 text-sky-800"
+      }`}
+    >
+      {KIND_LABELS[pkg.kind] ?? pkg.kind}
+    </span>
+  );
+
+  /** The package row actions, shared by the wide row and the narrow card. */
+  const packageActions = (pkg: SolarPackage, isOpen: boolean) => (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded(isOpen ? null : pkg.id)}
+        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-slate-400"
+      >
+        {isOpen ? "Hide lines" : "Lines"}
+      </button>
+      <button
+        type="button"
+        aria-label="Edit package"
+        onClick={() => editPackage(pkg)}
+        className={iconButtonClass}
+      >
+        <Icon name="Pencil" className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Delete package"
+        onClick={() => void removeRow("packages", pkg.id, "package")}
+        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+      >
+        <Icon name="Trash2" className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 
   const packagesTab = (
     <div className="space-y-5">
@@ -988,82 +1081,97 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                   return (
                     <div
                       key={index}
-                      className="grid items-center gap-2 rounded-xl bg-white p-2 sm:grid-cols-[minmax(0,2fr)_5rem_7rem_8rem_auto]"
+                      className="grid gap-2 rounded-xl bg-white p-3 @3xl:grid-cols-[minmax(0,2fr)_5rem_7rem_8rem_auto] @3xl:items-center @3xl:p-2"
                     >
-                      <select
-                        aria-label="Product"
-                        className={smallFieldClass}
-                        value={item.productId}
-                        onChange={(event) => {
-                          const next = [...packageDraft.items];
-                          const chosen = event.target.value
-                            ? productIndex.get(Number(event.target.value))
-                            : undefined;
-                          next[index] = {
-                            ...next[index],
-                            productId: event.target.value,
-                            label: next[index].label || (chosen ? `${chosen.brand} ${chosen.model}` : ""),
-                          };
-                          setPackageDraft({ ...packageDraft, items: next });
-                        }}
-                      >
-                        <option value="">Trade line — no catalogue product</option>
-                        {data.products.map((product) => (
-                          <option key={product.id} value={String(product.id)}>
-                            {product.brand} {product.model}
-                            {product.headline ? ` — ${product.headline}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        aria-label="Quantity"
-                        className={smallFieldClass}
-                        value={item.qty}
-                        inputMode="decimal"
-                        placeholder="1"
-                        onChange={(event) => {
-                          const next = [...packageDraft.items];
-                          next[index] = { ...next[index], qty: event.target.value };
-                          setPackageDraft({ ...packageDraft, items: next });
-                        }}
-                      />
-                      <select
-                        aria-label="Pricing basis"
-                        className={smallFieldClass}
-                        value={item.basis}
-                        onChange={(event) => {
-                          const next = [...packageDraft.items];
-                          next[index] = { ...next[index], basis: event.target.value };
-                          setPackageDraft({ ...packageDraft, items: next });
-                        }}
-                      >
-                        {ITEM_BASES.map((basis) => (
-                          <option key={basis} value={basis}>
-                            {basis === "each" ? "each" : "per kWp"}
-                          </option>
-                        ))}
-                      </select>
-                      {item.productId ? (
-                        <span className="px-2 text-right text-xs text-slate-500">
-                          {money(unit)} each
-                          <span className="block font-semibold text-navy-900">
-                            {money(Math.round(qty * unit))}
-                          </span>
-                        </span>
-                      ) : (
-                        <input
-                          aria-label="Allowance per unit"
+                      <div className="min-w-0">
+                        <span className={lineCaptionClass}>Product</span>
+                        <select
+                          aria-label="Product"
                           className={smallFieldClass}
-                          value={item.unitCost}
-                          inputMode="decimal"
-                          placeholder="allowance"
+                          value={item.productId}
                           onChange={(event) => {
                             const next = [...packageDraft.items];
-                            next[index] = { ...next[index], unitCost: event.target.value };
+                            const chosen = event.target.value
+                              ? productIndex.get(Number(event.target.value))
+                              : undefined;
+                            next[index] = {
+                              ...next[index],
+                              productId: event.target.value,
+                              label:
+                                next[index].label || (chosen ? `${chosen.brand} ${chosen.model}` : ""),
+                            };
+                            setPackageDraft({ ...packageDraft, items: next });
+                          }}
+                        >
+                          <option value="">Trade line — no catalogue product</option>
+                          {data.products.map((product) => (
+                            <option key={product.id} value={String(product.id)}>
+                              {product.brand} {product.model}
+                              {product.headline ? ` — ${product.headline}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <span className={lineCaptionClass}>Qty</span>
+                        <input
+                          aria-label="Quantity"
+                          className={smallFieldClass}
+                          value={item.qty}
+                          inputMode="decimal"
+                          placeholder="1"
+                          onChange={(event) => {
+                            const next = [...packageDraft.items];
+                            next[index] = { ...next[index], qty: event.target.value };
                             setPackageDraft({ ...packageDraft, items: next });
                           }}
                         />
-                      )}
+                      </div>
+                      <div>
+                        <span className={lineCaptionClass}>Basis</span>
+                        <select
+                          aria-label="Pricing basis"
+                          className={smallFieldClass}
+                          value={item.basis}
+                          onChange={(event) => {
+                            const next = [...packageDraft.items];
+                            next[index] = { ...next[index], basis: event.target.value };
+                            setPackageDraft({ ...packageDraft, items: next });
+                          }}
+                        >
+                          {ITEM_BASES.map((basis) => (
+                            <option key={basis} value={basis}>
+                              {basis === "each" ? "each" : "per kWp"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="min-w-0">
+                        <span className={lineCaptionClass}>
+                          {item.productId ? "Line total" : "Allowance each"}
+                        </span>
+                        {item.productId ? (
+                          <span className="block text-xs text-slate-500 @3xl:px-2 @3xl:text-right">
+                            {money(unit)} each
+                            <span className="block font-semibold text-navy-900">
+                              {money(Math.round(qty * unit))}
+                            </span>
+                          </span>
+                        ) : (
+                          <input
+                            aria-label="Allowance per unit"
+                            className={smallFieldClass}
+                            value={item.unitCost}
+                            inputMode="decimal"
+                            placeholder="allowance"
+                            onChange={(event) => {
+                              const next = [...packageDraft.items];
+                              next[index] = { ...next[index], unitCost: event.target.value };
+                              setPackageDraft({ ...packageDraft, items: next });
+                            }}
+                          />
+                        )}
+                      </div>
                       <button
                         type="button"
                         aria-label="Remove line"
@@ -1076,7 +1184,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                                 : [{ ...EMPTY_ITEM }],
                           })
                         }
-                        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+                        className={`${iconButtonClass} justify-self-end hover:border-red-300 hover:text-red-500`}
                       >
                         <Icon name="X" className="h-3.5 w-3.5" />
                       </button>
@@ -1096,7 +1204,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
             </div>
 
             {draftTotals ? (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-4 grid grid-cols-2 gap-3 @2xl:grid-cols-4">
                 <div className="rounded-xl bg-white px-4 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Cost to us
@@ -1196,19 +1304,10 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
             const isOpen = expanded === pkg.id;
             return (
               <li key={pkg.id} className={`py-3 ${pkg.active ? "" : "opacity-50"}`}>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="hidden items-center gap-3 @3xl:flex">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-navy-900">
-                      {pkg.name}
-                      <span
-                        className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                          pkg.kind === "custom"
-                            ? "bg-violet-100 text-violet-700"
-                            : "bg-sky-100 text-sky-800"
-                        }`}
-                      >
-                        {KIND_LABELS[pkg.kind] ?? pkg.kind}
-                      </span>
+                    <p className="font-semibold break-words text-navy-900">
+                      {pkg.name} <span className="ml-1 align-middle">{kindBadge(pkg)}</span>
                     </p>
                     <p className="mt-0.5 text-xs text-slate-500">
                       {totals.sizeKwp > 0 ? `${totals.sizeKwp} kWp` : "no size set"} ·{" "}
@@ -1216,17 +1315,17 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                       {pkg.description ? ` · ${pkg.description}` : ""}
                     </p>
                   </div>
-                  <div className="text-right text-xs text-slate-500">
+                  <div className="w-32 shrink-0 text-right text-xs text-slate-500">
                     <p>cost {money(totals.costMinor)}</p>
                     {pkg.kind === "custom" ? (
-                      <p>markup {Number(pkg.markupPct) || 0}%</p>
+                      <p>+{Number(pkg.markupPct) || 0}% on cost</p>
                     ) : (
                       <p>
                         {totals.sizeKwp > 0 ? `${money(totals.sellPerKwpMinor)} per kWp` : "—"}
                       </p>
                     )}
                   </div>
-                  <div className="w-32 text-right">
+                  <div className="w-32 shrink-0 text-right">
                     <p className="text-sm font-extrabold tabular-nums text-navy-900">
                       {money(totals.sellMinor)}
                     </p>
@@ -1238,72 +1337,86 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                       {money(totals.profitMinor)} · {percent(totals.marginPct)}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(isOpen ? null : pkg.id)}
-                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-slate-400"
-                  >
-                    {isOpen ? "Hide lines" : "Lines"}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Edit package"
-                    onClick={() => editPackage(pkg)}
-                    className={iconButtonClass}
-                  >
-                    <Icon name="Pencil" className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Delete package"
-                    onClick={() => void removeRow("packages", pkg.id, "package")}
-                    className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-                  >
-                    <Icon name="Trash2" className="h-3.5 w-3.5" />
-                  </button>
+                  {packageActions(pkg, isOpen)}
+                </div>
+
+                {/* Below that the same row cannot hold its five columns, so the
+                    fields stack and each one carries its own label. */}
+                <div className="@3xl:hidden">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 font-semibold break-words text-navy-900">{pkg.name}</p>
+                    <span className="shrink-0">{kindBadge(pkg)}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs break-words text-slate-500">
+                    {totals.sizeKwp > 0 ? `${totals.sizeKwp} kWp` : "no size set"} ·{" "}
+                    {pkg.items.length} line(s)
+                  </p>
+                  {pkg.description ? (
+                    <p className="mt-1 text-xs break-words text-slate-500">{pkg.description}</p>
+                  ) : null}
+
+                  <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                    <RowField label="Cost to us" value={money(totals.costMinor)} />
+                    <RowField
+                      label="Pricing rule"
+                      value={
+                        pkg.kind === "custom"
+                          ? `+${Number(pkg.markupPct) || 0}% on cost`
+                          : totals.sizeKwp > 0
+                            ? `${money(totals.sellPerKwpMinor)}/kWp`
+                            : "—"
+                      }
+                      tone="muted"
+                    />
+                    <RowField
+                      label="Customer pays"
+                      value={money(totals.sellMinor)}
+                      tone="strong"
+                    />
+                    <RowField
+                      label="Profit"
+                      value={`${money(totals.profitMinor)} · ${percent(totals.marginPct)}`}
+                      tone={totals.profitMinor >= 0 ? "good" : "bad"}
+                    />
+                  </dl>
+
+                  <div className="mt-2.5">{packageActions(pkg, isOpen)}</div>
                 </div>
 
                 {isOpen ? (
-                  <div className="mt-3 overflow-x-auto rounded-xl bg-slate-50 p-3">
-                    <table className="w-full min-w-[560px] text-left text-xs">
-                      <thead className="text-[10px] uppercase tracking-wider text-slate-500">
-                        <tr>
-                          <th className="py-1.5 pr-3">Line</th>
-                          <th className="py-1.5 pr-3">Qty</th>
-                          <th className="py-1.5 pr-3 text-right">Unit</th>
-                          <th className="py-1.5 text-right">Line cost</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {pkg.items.map((item: PackageItem) => (
-                          <tr key={item.id}>
-                            <td className="py-1.5 pr-3 text-slate-700">
+                  <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                    <ul className="divide-y divide-slate-200 text-xs">
+                      {pkg.items.map((item: PackageItem) => (
+                        <li
+                          key={item.id}
+                          className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                        >
+                          <div className="min-w-0">
+                            <p className="break-words text-slate-700">
                               {itemLabel(item, productIndex)}
-                            </td>
-                            <td className="py-1.5 pr-3 text-slate-500">{qtyLabel(item)}</td>
-                            <td className="py-1.5 pr-3 text-right tabular-nums text-slate-500">
-                              {money(itemUnitCostMinor(item, productIndex))}
-                            </td>
-                            <td className="py-1.5 text-right font-semibold tabular-nums text-navy-900">
-                              {money(
-                                Math.round(
-                                  (Number(item.qty) || 0) *
-                                    itemUnitCostMinor(item, productIndex) *
-                                    (item.basis === "per_kwp" ? totals.sizeKwp : 1),
-                                ),
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                        {pkg.items.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="py-4 text-center text-slate-500">
-                              No lines yet — open the package and add what is in it.
-                            </td>
-                          </tr>
-                        ) : null}
-                      </tbody>
-                    </table>
+                            </p>
+                            <p className="mt-0.5 text-slate-500">
+                              {qtyLabel(item)} × {money(itemUnitCostMinor(item, productIndex))}
+                              {item.basis === "per_kwp" ? ` × ${totals.sizeKwp} kWp` : ""}
+                            </p>
+                          </div>
+                          <p className="shrink-0 font-semibold tabular-nums text-navy-900">
+                            {money(
+                              Math.round(
+                                (Number(item.qty) || 0) *
+                                  itemUnitCostMinor(item, productIndex) *
+                                  (item.basis === "per_kwp" ? totals.sizeKwp : 1),
+                              ),
+                            )}
+                          </p>
+                        </li>
+                      ))}
+                      {pkg.items.length === 0 ? (
+                        <li className="py-4 text-center text-slate-500">
+                          No lines yet — open the package and add what is in it.
+                        </li>
+                      ) : null}
+                    </ul>
                     {pkg.kind === "custom" ? (
                       <p className="mt-2 text-[11px] text-slate-500">
                         Priced per kWp. At {TOP_SIZE_KWP} kWp this package quotes{" "}
@@ -1330,7 +1443,11 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
   );
 
   return (
-    <div className="space-y-5">
+    // `@container`: everything inside responds to the width this board actually
+    // gets, not the viewport. Next to a 256px sidebar a "desktop" viewport can
+    // still leave this column phone-width, and a container query reads that
+    // correctly where a `md:` breakpoint would not.
+    <div className="@container space-y-5">
       <p className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <Icon name="TriangleAlert" className="mt-0.5 h-4 w-4 shrink-0" />
         <span>

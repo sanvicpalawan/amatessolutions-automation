@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import RowField from "@/components/admin/RowField";
 import { Icon } from "@/lib/icons";
 import {
   EXPENSE_CATEGORIES,
@@ -25,6 +26,15 @@ import {
 import { money, percent, toMinor } from "@/lib/money";
 
 type Tab = "overview" | "subscriptions" | "jobs" | "marketing";
+
+/**
+ * Every tab below sits in a `@container`, so the responsive variants here are
+ * `@sm:`/`@3xl:`/`@4xl:` (container width), not `sm:`/`md:`/`lg:` (viewport
+ * width). The admin column is much narrower than the window once the sidebar
+ * and page padding are taken out, and on a phone the two are simply not the
+ * same number. Collections render as a real table once there is room for one,
+ * and as a stack of labelled cards when there is not.
+ */
 
 const TABS: { value: Tab; label: string; icon: string }[] = [
   { value: "overview", label: "Overview", icon: "ChartLine" },
@@ -373,10 +383,10 @@ export default function FinanceBoard({
     hint: string,
     tone: "plain" | "good" | "bad" = "plain",
   ) => (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
       <p
-        className={`mt-1.5 text-xl font-extrabold tracking-tight ${
+        className={`mt-1.5 text-base font-extrabold tracking-tight break-words @xl:text-xl ${
           tone === "good" ? "text-emerald-700" : tone === "bad" ? "text-red-600" : "text-navy-900"
         }`}
       >
@@ -404,10 +414,79 @@ export default function FinanceBoard({
     </div>
   );
 
+  /** "Free plan" is a badge, not a cycle, so it is shared by both layouts. */
+  const planBadge = (item: RecurringItem) =>
+    item.plan === "free" ? (
+      <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+        Free plan
+      </span>
+    ) : null;
+
+  /** Shared by the wide subscription table and the narrow subscription card. */
+  const recurringActions = (item: RecurringItem) => (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => void toggleRecurring(item)}
+        className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-solar-400 hover:text-solar-600"
+      >
+        {item.active ? "Pause" : "Resume"}
+      </button>
+      <button
+        type="button"
+        aria-label="Edit subscription"
+        onClick={() => editRecurring(item)}
+        className={iconButtonClass}
+      >
+        <Icon name="Pencil" className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Delete subscription"
+        onClick={() => void removeRow("recurring", item.id, "subscription")}
+        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+      >
+        <Icon name="Trash2" className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+
+  const statusBadge = (job: JobItem) => (
+    <span
+      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+        STATUS_TONES[job.status] ?? "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {job.status}
+    </span>
+  );
+
+  /** Shared by the wide job table and the narrow job card. */
+  const jobActions = (job: JobItem) => (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-label="Edit job"
+        onClick={() => editJob(job)}
+        className={iconButtonClass}
+      >
+        <Icon name="Pencil" className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Delete job"
+        onClick={() => void removeRow("jobs", job.id, "job")}
+        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+      >
+        <Icon name="Trash2" className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+
   /* ---------------- Tabs ---------------- */
 
   const overview = (
-    <div className="space-y-5">
+    <div className="@container space-y-5">
       {summary.needsRate ? (
         <p className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <Icon name="TriangleAlert" className="mt-0.5 h-4 w-4 shrink-0" />
@@ -418,7 +497,7 @@ export default function FinanceBoard({
         </p>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-4">
         {statCard("Revenue", money(summary.revenueMinor), `${summary.jobs.length} job(s) closed`)}
         {statCard(
           "Gross profit",
@@ -466,7 +545,8 @@ export default function FinanceBoard({
         <h3 className="px-5 pt-5 text-sm font-bold uppercase tracking-wider text-navy-900">
           Last 6 months
         </h3>
-        <div className="mt-3 overflow-x-auto">
+        {/* Five numeric columns need room; below that each month is a card. */}
+        <div className="mt-3 hidden overflow-x-auto @3xl:block">
           <table className="w-full min-w-[620px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
@@ -511,12 +591,39 @@ export default function FinanceBoard({
             </tbody>
           </table>
         </div>
+
+        <ul className="mt-2 divide-y divide-slate-100 @3xl:hidden">
+          {history.map((row) => (
+            <li
+              key={row.period}
+              className={`py-3.5 first:pt-1 ${row.period === period ? "bg-solar-50/60" : ""}`}
+            >
+              <button
+                type="button"
+                onClick={() => setPeriod(row.period)}
+                className="font-semibold text-navy-900 underline decoration-slate-300 underline-offset-2 hover:decoration-solar-400"
+              >
+                {periodLabel(row.period)}
+              </button>
+              <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                <RowField label="Revenue" value={money(row.revenueMinor)} />
+                <RowField label="Job costs" value={money(row.jobCostMinor)} tone="muted" />
+                <RowField label="Overhead" value={money(row.overheadMinor)} tone="muted" />
+                <RowField
+                  label="Net"
+                  value={money(row.netMinor)}
+                  tone={row.netMinor >= 0 ? "good" : "bad"}
+                />
+              </dl>
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );
 
   const subscriptions = (
-    <div className="space-y-5">
+    <div className="@container space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -679,7 +786,8 @@ export default function FinanceBoard({
           </div>
         ) : null}
 
-        <div className="mt-4 overflow-x-auto">
+        {/* A real table once seven columns fit, cards below that. */}
+        <div className="mt-4 hidden overflow-x-auto @4xl:block">
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
@@ -703,13 +811,7 @@ export default function FinanceBoard({
                     </p>
                   </td>
                   <td className="px-4 py-3 text-xs capitalize text-slate-600">
-                    {item.plan === "free" ? (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                        Free plan
-                      </span>
-                    ) : (
-                      item.cycle
-                    )}
+                    {item.plan === "free" ? planBadge(item) : item.cycle}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                     {item.plan === "free" ? "—" : money(item.amountMinor, item.currency)}
@@ -720,31 +822,7 @@ export default function FinanceBoard({
                   <td className="px-4 py-3 text-xs capitalize text-slate-600">{item.category}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">{item.nextRenewal ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => void toggleRecurring(item)}
-                        className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-solar-400 hover:text-solar-600"
-                      >
-                        {item.active ? "Pause" : "Resume"}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Edit subscription"
-                        onClick={() => editRecurring(item)}
-                        className={iconButtonClass}
-                      >
-                        <Icon name="Pencil" className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Delete subscription"
-                        onClick={() => void removeRow("recurring", item.id, "subscription")}
-                        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-                      >
-                        <Icon name="Trash2" className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <div className="flex justify-end">{recurringActions(item)}</div>
                   </td>
                 </tr>
               ))}
@@ -759,6 +837,53 @@ export default function FinanceBoard({
             </tbody>
           </table>
         </div>
+
+        {/* The same seven columns cannot be squeezed, so each bill is a card. */}
+        <ul className="mt-2 divide-y divide-slate-100 @4xl:hidden">
+          {data.recurring.map((item) => (
+            <li key={item.id} className={`py-4 ${item.active ? "" : "opacity-50"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold break-words text-navy-900">{item.name}</p>
+                  <p className="text-xs break-words text-slate-500">
+                    {item.vendor || "—"}
+                    {item.notes ? ` · ${item.notes}` : ""}
+                  </p>
+                </div>
+                {item.plan === "free" ? (
+                  <span className="shrink-0">{planBadge(item)}</span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                    {item.cycle}
+                  </span>
+                )}
+              </div>
+
+              <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                <RowField
+                  label="Billed"
+                  value={item.plan === "free" ? "—" : money(item.amountMinor, item.currency)}
+                  tone="muted"
+                />
+                <RowField
+                  label="Per month"
+                  value={money(monthlyEquivalentMinor(item, rate))}
+                  tone="strong"
+                />
+                <RowField label="Category" value={item.category || "—"} tone="muted" />
+                <RowField label="Renews" value={item.nextRenewal ?? "—"} tone="muted" />
+              </dl>
+
+              <div className="mt-2.5">{recurringActions(item)}</div>
+            </li>
+          ))}
+          {data.recurring.length === 0 ? (
+            <li className="py-10 text-center text-sm text-slate-500">
+              Nothing yet. Add UpCloud, Supabase, Neon, GitHub and Cloudflare — free plans too, so
+              you can see what you are not paying for.
+            </li>
+          ) : null}
+        </ul>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -871,32 +996,36 @@ export default function FinanceBoard({
         <ul className="mt-4 divide-y divide-slate-100">
           {data.expenses.map((item) => (
             <li key={item.id} className="flex flex-wrap items-center gap-3 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-navy-900">{item.label}</p>
-                <p className="text-xs text-slate-500">
+              <div className="min-w-0 flex-1 basis-full @xl:basis-0">
+                <p className="font-semibold break-words text-navy-900">{item.label}</p>
+                <p className="text-xs break-words text-slate-500">
                   {item.spentOn ?? "no date"} · {item.category}
-                  {item.jobId ? ` · charged to ${jobById.get(item.jobId)?.customer ?? `job #${item.jobId}`}` : " · overhead"}
+                  {item.jobId
+                    ? ` · charged to ${jobById.get(item.jobId)?.customer ?? `job #${item.jobId}`}`
+                    : " · overhead"}
                 </p>
               </div>
-              <span className="font-semibold tabular-nums text-navy-900">
-                {money(item.amountMinor, item.currency)}
-              </span>
-              <button
-                type="button"
-                aria-label="Edit cost"
-                onClick={() => editExpense(item)}
-                className={iconButtonClass}
-              >
-                <Icon name="Pencil" className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Delete cost"
-                onClick={() => void removeRow("expenses", item.id, "cost")}
-                className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-              >
-                <Icon name="Trash2" className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold tabular-nums text-navy-900">
+                  {money(item.amountMinor, item.currency)}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Edit cost"
+                  onClick={() => editExpense(item)}
+                  className={iconButtonClass}
+                >
+                  <Icon name="Pencil" className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Delete cost"
+                  onClick={() => void removeRow("expenses", item.id, "cost")}
+                  className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+                >
+                  <Icon name="Trash2" className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </li>
           ))}
           {data.expenses.length === 0 ? (
@@ -911,7 +1040,7 @@ export default function FinanceBoard({
   );
 
   const jobs = (
-    <div className="space-y-5">
+    <div className="@container space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -1020,8 +1149,12 @@ export default function FinanceBoard({
               </p>
               <div className="mt-2 space-y-2">
                 {jobDraft.costLines.map((line, index) => (
-                  <div key={index} className="flex items-center gap-2">
+                  <div
+                    key={index}
+                    className="grid gap-2 @xl:grid-cols-[minmax(0,1fr)_10rem_auto] @xl:items-center"
+                  >
                     <input
+                      aria-label="Cost line"
                       className={smallFieldClass}
                       value={line.label}
                       placeholder="Panels — 8 x 550W"
@@ -1032,7 +1165,8 @@ export default function FinanceBoard({
                       }}
                     />
                     <input
-                      className={`${smallFieldClass} w-40`}
+                      aria-label="Amount"
+                      className={smallFieldClass}
                       value={line.amount}
                       inputMode="decimal"
                       placeholder="0"
@@ -1054,7 +1188,7 @@ export default function FinanceBoard({
                               : [{ label: "", amount: "" }],
                         })
                       }
-                      className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+                      className={`${iconButtonClass} justify-self-end hover:border-red-300 hover:text-red-500`}
                     >
                       <Icon name="X" className="h-3.5 w-3.5" />
                     </button>
@@ -1105,7 +1239,7 @@ export default function FinanceBoard({
           </div>
         ) : null}
 
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 hidden overflow-x-auto @4xl:block">
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
@@ -1131,15 +1265,7 @@ export default function FinanceBoard({
                         {job.sizeKwp ? ` · ${Number(job.sizeKwp)} kWp` : ""}
                       </p>
                     </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
-                          STATUS_TONES[job.status] ?? "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {job.status}
-                      </span>
-                    </td>
+                    <td className="px-4 py-3">{statusBadge(job)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {money(job.sellPriceMinor, job.currency)}
                     </td>
@@ -1158,24 +1284,7 @@ export default function FinanceBoard({
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-600">{job.closedOn ?? "—"}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          aria-label="Edit job"
-                          onClick={() => editJob(job)}
-                          className={iconButtonClass}
-                        >
-                          <Icon name="Pencil" className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Delete job"
-                          onClick={() => void removeRow("jobs", job.id, "job")}
-                          className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-                        >
-                          <Icon name="Trash2" className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      <div className="flex justify-end">{jobActions(job)}</div>
                     </td>
                   </tr>
                 );
@@ -1191,12 +1300,65 @@ export default function FinanceBoard({
             </tbody>
           </table>
         </div>
+
+        <ul className="mt-2 divide-y divide-slate-100 @4xl:hidden">
+          {data.jobs.map((job) => {
+            const cost = jobTotalCostMinor(job, data.expenses, rate);
+            const profit = job.sellPriceMinor - cost;
+            return (
+              <li key={job.id} className="py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold break-words text-navy-900">{job.customer}</p>
+                    <p className="text-xs break-words text-slate-500">
+                      {job.location}
+                      {job.sizeKwp ? ` · ${Number(job.sizeKwp)} kWp` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0">{statusBadge(job)}</span>
+                </div>
+
+                <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                  <RowField
+                    label="Sold for"
+                    value={money(job.sellPriceMinor, job.currency)}
+                    tone="strong"
+                  />
+                  <RowField label="Cost" value={money(cost)} tone="muted" />
+                  <RowField
+                    label="Profit"
+                    value={
+                      <>
+                        {money(profit)}
+                        {job.sellPriceMinor > 0 ? (
+                          <span className="ml-1 text-[11px] font-semibold text-slate-400">
+                            {percent((profit / job.sellPriceMinor) * 100)}
+                          </span>
+                        ) : null}
+                      </>
+                    }
+                    tone={profit >= 0 ? "good" : "bad"}
+                  />
+                  <RowField label="Closed" value={job.closedOn ?? "—"} tone="muted" />
+                </dl>
+
+                <div className="mt-2.5">{jobActions(job)}</div>
+              </li>
+            );
+          })}
+          {data.jobs.length === 0 ? (
+            <li className="py-10 text-center text-sm text-slate-500">
+              No jobs yet. Add one when you quote, and fill in the cost lines when the supplier
+              invoices come in.
+            </li>
+          ) : null}
+        </ul>
       </section>
     </div>
   );
 
   const marketing = (
-    <div className="space-y-5">
+    <div className="@container space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -1300,7 +1462,7 @@ export default function FinanceBoard({
         ) : null}
 
         <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col gap-1 @xl:flex-row @xl:items-center @xl:justify-between @xl:gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               This month
             </span>
@@ -1327,41 +1489,43 @@ export default function FinanceBoard({
           {monthMarketing.map((item) => {
             const variance = item.plannedMinor - item.actualMinor;
             return (
-              <li key={item.id} className="flex flex-wrap items-center gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-navy-900">
+              <li key={item.id} className="flex flex-wrap items-center gap-3 py-3.5">
+                <div className="min-w-0 flex-1 basis-full @xl:basis-0">
+                  <p className="font-semibold break-words text-navy-900">
                     {item.campaign || "Monthly budget"}
                   </p>
-                  <p className="text-xs text-slate-500">{item.notes || "—"}</p>
+                  <p className="text-xs break-words text-slate-500">{item.notes || "—"}</p>
                 </div>
-                <div className="text-right text-xs text-slate-500">
+                <div className="text-xs text-slate-500 @xl:text-right">
                   <p>planned {money(item.plannedMinor, item.currency)}</p>
                   <p>spent {money(item.actualMinor, item.currency)}</p>
                 </div>
                 <span
-                  className={`w-28 text-right text-sm font-bold tabular-nums ${
+                  className={`text-sm font-bold tabular-nums @xl:w-28 @xl:text-right ${
                     variance >= 0 ? "text-emerald-700" : "text-red-600"
                   }`}
                 >
                   {variance >= 0 ? "+" : ""}
                   {money(variance, item.currency)}
                 </span>
-                <button
-                  type="button"
-                  aria-label="Edit marketing row"
-                  onClick={() => editMarketing(item)}
-                  className={iconButtonClass}
-                >
-                  <Icon name="Pencil" className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Delete marketing row"
-                  onClick={() => void removeRow("marketing", item.id, "marketing row")}
-                  className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-                >
-                  <Icon name="Trash2" className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label="Edit marketing row"
+                    onClick={() => editMarketing(item)}
+                    className={iconButtonClass}
+                  >
+                    <Icon name="Pencil" className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete marketing row"
+                    onClick={() => void removeRow("marketing", item.id, "marketing row")}
+                    className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
+                  >
+                    <Icon name="Trash2" className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </li>
             );
           })}
@@ -1376,7 +1540,7 @@ export default function FinanceBoard({
   );
 
   return (
-    <div className="space-y-5">
+    <div className="@container space-y-5">
       {/* Toolbar */}
       <section className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
