@@ -18,7 +18,8 @@ export default function CoverageMap({
   featuredNote: string;
 }) {
   const [active, setActive] = useState<string | null>(null);
-  const places = towns.filter((town) => PALAWAN_TOWNS[town]);
+  // Balabac (far south) is an emerging destination, so it always appears on the map.
+  const places = Array.from(new Set([...towns, "Balabac"])).filter((town) => PALAWAN_TOWNS[town]);
 
   return (
     <section id="coverage" className="relative overflow-hidden bg-navy-950 py-24 sm:py-32">
@@ -56,9 +57,9 @@ export default function CoverageMap({
                     className={`h-2 w-2 rounded-full transition-colors ${active === town ? "bg-solar-400" : "bg-slate-500"}`}
                   />
                   {town}
-                  {town === featured ? (
+                  {town === featured || town === "Balabac" ? (
                     <span className="ml-auto rounded-full bg-solar-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-navy-950">
-                      Featured
+                      {town === featured ? "Featured" : "Emerging"}
                     </span>
                   ) : null}
                 </button>
@@ -70,13 +71,12 @@ export default function CoverageMap({
 
         <Reveal from="right">
           <svg
-            viewBox="0 0 320 310"
-            className="mx-auto block w-full max-w-md"
+            viewBox="0 0 320 430"
+            className="mx-auto block w-full max-w-sm"
             role="img"
             aria-label="Map of Palawan with Amates service areas"
           >
             <path d={PALAWAN_PATH} fill="#12404d" stroke="#12404d" strokeWidth="0.6" strokeLinejoin="round" />
-            <path d={PALAWAN_PATH} fill="none" stroke="#2a7a8c" strokeOpacity="0.55" strokeWidth="0.5" />
             {places.map((town, index) => {
               const [x, y] = PALAWAN_TOWNS[town];
               const on = active === town || town === featured;

@@ -19,4 +19,5 @@ export const SUB_CITIES = [
   "Coron",
   "Linapacan",
   "Taytay",
+  "Balabac",
 ];

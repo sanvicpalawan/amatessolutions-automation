@@ -160,6 +160,7 @@ export const PALAWAN_LOCATIONS = [
   "Taytay",
   "Roxas",
   "Brooke's Point",
+  "Balabac",
   "Narra",
   "Busuanga",
   "Culion",
