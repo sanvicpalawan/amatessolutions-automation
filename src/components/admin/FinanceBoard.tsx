@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import DetailDialog from "@/components/admin/DetailDialog";
 import RowField from "@/components/admin/RowField";
@@ -12,6 +12,7 @@ import {
   RECURRING_CYCLES,
   RECURRING_PLANS,
   isValidPeriod,
+  jobCostLinesMinor,
   jobTotalCostMinor,
   monthSummary,
   monthlyEquivalentMinor,
@@ -24,7 +25,7 @@ import {
   type MarketingItem,
   type RecurringItem,
 } from "@/lib/finance-model";
-import { money, percent, toMinor } from "@/lib/money";
+import { money, percent, toMinor, toPhp } from "@/lib/money";
 
 type Tab = "overview" | "subscriptions" | "jobs" | "marketing";
 
@@ -172,8 +173,11 @@ export default function FinanceBoard({
   );
 
   const [recurringDraft, setRecurringDraft] = useState<RecurringDraft | null>(null);
-  /** The subscription whose popup is open. */
+  /** The record whose popup is open, per list. */
   const [openRecurringId, setOpenRecurringId] = useState<number | null>(null);
+  const [openJobId, setOpenJobId] = useState<number | null>(null);
+  const [openMarketingId, setOpenMarketingId] = useState<number | null>(null);
+  const [openExpenseId, setOpenExpenseId] = useState<number | null>(null);
   const [jobDraft, setJobDraft] = useState<JobDraft | null>(null);
   const [marketingDraft, setMarketingDraft] = useState<MarketingDraft | null>(null);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
@@ -428,6 +432,39 @@ export default function FinanceBoard({
     ) : null;
 
   /**
+   * The Edit / Delete / Close row shared by every record popup. `extra` sits
+   * between Edit and Delete for a list-specific action.
+   */
+  const dialogActions = (
+    onEdit: () => void,
+    onDelete: () => void,
+    close: () => void,
+    extra?: ReactNode,
+  ) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" disabled={busy} onClick={onEdit} className={primaryButtonClass}>
+        Edit
+      </button>
+      {extra}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onDelete}
+        className={`${ghostButtonClass} hover:border-red-300 hover:text-red-500`}
+      >
+        Delete
+      </button>
+      <button
+        type="button"
+        onClick={close}
+        className="ml-auto text-[11px] font-bold uppercase tracking-wider text-slate-500 transition hover:text-navy-900"
+      >
+        {busy ? "Saving…" : "Close"}
+      </button>
+    </div>
+  );
+
+  /**
    * Clicking a subscription opens this instead of offering three small buttons
    * in the row. "Pause" was never clear - it means "stop counting this in the
    * monthly overhead", which is what the button now says.
@@ -441,48 +478,29 @@ export default function FinanceBoard({
       subtitle={openRecurring?.vendor || undefined}
       onClose={() => setOpenRecurringId(null)}
       footer={
-        openRecurring ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
+        openRecurring
+          ? dialogActions(
+              () => {
                 setOpenRecurringId(null);
                 editRecurring(openRecurring);
-              }}
-              className={primaryButtonClass}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void toggleRecurring(openRecurring)}
-              className={ghostButtonClass}
-              title="Leave it out of the monthly overhead and the profit and loss, but keep the record."
-            >
-              {openRecurring.active ? "Leave out of monthly cost" : "Put back in monthly cost"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
+              },
+              () => {
                 setOpenRecurringId(null);
                 void removeRow("recurring", openRecurring.id, "subscription");
-              }}
-              className={`${ghostButtonClass} hover:border-red-300 hover:text-red-500`}
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpenRecurringId(null)}
-              className="ml-auto text-[11px] font-bold uppercase tracking-wider text-slate-500 transition hover:text-navy-900"
-            >
-              {busy ? "Saving…" : "Close"}
-            </button>
-          </div>
-        ) : null
+              },
+              () => setOpenRecurringId(null),
+              <button
+                key="toggle"
+                type="button"
+                disabled={busy}
+                onClick={() => void toggleRecurring(openRecurring)}
+                className={ghostButtonClass}
+                title="Leave it out of the monthly overhead and the profit and loss, but keep the record."
+              >
+                {openRecurring.active ? "Leave out of monthly cost" : "Put back in monthly cost"}
+              </button>,
+            )
+          : null
       }
     >
       {openRecurring ? (
@@ -553,26 +571,295 @@ export default function FinanceBoard({
     </span>
   );
 
-  /** Shared by the wide job table and the narrow job card. */
-  const jobActions = (job: JobItem) => (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        aria-label="Edit job"
-        onClick={() => editJob(job)}
-        className={iconButtonClass}
-      >
-        <Icon name="Pencil" className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        aria-label="Delete job"
-        onClick={() => void removeRow("jobs", job.id, "job")}
-        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-      >
-        <Icon name="Trash2" className="h-3.5 w-3.5" />
-      </button>
-    </div>
+  /**
+   * The job popup. Beyond the numbers it lists what the job is made of - the
+   * cost lines plus any one-off cost filed against it - because the difference
+   * between the total cost and the lines on their own is otherwise invisible.
+   */
+  const openJob = data.jobs.find((job) => job.id === openJobId) ?? null;
+  const openJobCost = openJob ? jobTotalCostMinor(openJob, data.expenses, rate) : 0;
+  const openJobLinesMinor = openJob ? jobCostLinesMinor(openJob, rate) : 0;
+  const openJobExtras = openJob
+    ? data.expenses.filter((expense) => expense.jobId === openJob.id)
+    : [];
+  const openJobProfit = openJob ? openJob.sellPriceMinor - openJobCost : 0;
+
+  const jobDialog = (
+    <DetailDialog
+      open={openJob !== null}
+      title={openJob?.customer ?? ""}
+      subtitle={
+        openJob
+          ? [openJob.location, openJob.sizeKwp ? `${Number(openJob.sizeKwp)} kWp` : null]
+              .filter(Boolean)
+              .join(" · ")
+          : undefined
+      }
+      onClose={() => setOpenJobId(null)}
+      footer={
+        openJob
+          ? dialogActions(
+              () => {
+                setOpenJobId(null);
+                editJob(openJob);
+              },
+              () => {
+                setOpenJobId(null);
+                void removeRow("jobs", openJob.id, "job");
+              },
+              () => setOpenJobId(null),
+            )
+          : null
+      }
+    >
+      {openJob ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            {statusBadge(openJob)}
+            {openJob.closedOn ? null : (
+              <span className="text-xs text-slate-500">
+                No closed date yet, so it is not counted as revenue.
+              </span>
+            )}
+          </div>
+
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 @xl:grid-cols-4">
+            <RowField
+              label="Sold for"
+              value={money(openJob.sellPriceMinor, openJob.currency)}
+              tone="strong"
+            />
+            <RowField label="Cost" value={money(openJobCost)} tone="muted" />
+            <RowField
+              label="Profit"
+              value={
+                <>
+                  {money(openJobProfit)}
+                  {openJob.sellPriceMinor > 0 ? (
+                    <span className="ml-1 text-[11px] font-semibold text-slate-400">
+                      {percent((openJobProfit / openJob.sellPriceMinor) * 100)}
+                    </span>
+                  ) : null}
+                </>
+              }
+              tone={openJobProfit >= 0 ? "good" : "bad"}
+            />
+            <RowField label="Closed" value={openJob.closedOn ?? "not closed"} tone="muted" />
+          </dl>
+
+          <div className="mt-5">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Cost lines ({openJob.costLines.length})
+              </p>
+              <p className="text-xs tabular-nums text-slate-500">{money(openJobLinesMinor)}</p>
+            </div>
+            {openJob.costLines.length ? (
+              <ul className="mt-1.5 divide-y divide-slate-100">
+                {openJob.costLines.map((line, index) => (
+                  <li
+                    key={`${line.label}-${index}`}
+                    className="flex items-baseline justify-between gap-4 py-1.5"
+                  >
+                    <span className="min-w-0 text-sm break-words text-slate-600">{line.label}</span>
+                    <span className="shrink-0 text-sm tabular-nums text-slate-700">
+                      {money(toPhp(line.amountMinor, openJob.currency, rate))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-sm text-slate-500">
+                No cost lines yet. Add them when the supplier invoices come in, or start from a
+                package in the solar catalogue.
+              </p>
+            )}
+          </div>
+
+          {openJobExtras.length ? (
+            <div className="mt-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Also charged to this job ({openJobExtras.length})
+                </p>
+                <p className="text-xs tabular-nums text-slate-500">
+                  {money(openJobCost - openJobLinesMinor)}
+                </p>
+              </div>
+              <ul className="mt-1.5 divide-y divide-slate-100">
+                {openJobExtras.map((expense) => (
+                  <li
+                    key={expense.id}
+                    className="flex items-baseline justify-between gap-4 py-1.5"
+                  >
+                    <span className="min-w-0 text-sm break-words text-slate-600">
+                      {expense.label}
+                      <span className="text-slate-400"> · {expense.category}</span>
+                    </span>
+                    <span className="shrink-0 text-sm tabular-nums text-slate-700">
+                      {money(toPhp(expense.amountMinor, expense.currency, rate))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {openJob.notes ? (
+            <div className="mt-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Notes
+              </p>
+              <p className="mt-1 text-sm break-words whitespace-pre-wrap text-slate-600">
+                {openJob.notes}
+              </p>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </DetailDialog>
+  );
+
+  const openExpense = data.expenses.find((item) => item.id === openExpenseId) ?? null;
+  const openExpenseJob = openExpense?.jobId ? (jobById.get(openExpense.jobId) ?? null) : null;
+
+  const expenseDialog = (
+    <DetailDialog
+      open={openExpense !== null}
+      title={openExpense?.label ?? ""}
+      subtitle={openExpense?.category || undefined}
+      onClose={() => setOpenExpenseId(null)}
+      footer={
+        openExpense
+          ? dialogActions(
+              () => {
+                setOpenExpenseId(null);
+                editExpense(openExpense);
+              },
+              () => {
+                setOpenExpenseId(null);
+                void removeRow("expenses", openExpense.id, "cost");
+              },
+              () => setOpenExpenseId(null),
+            )
+          : null
+      }
+    >
+      {openExpense ? (
+        <>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 @xl:grid-cols-3">
+            <RowField
+              label="Amount"
+              value={money(openExpense.amountMinor, openExpense.currency)}
+              tone="strong"
+            />
+            <RowField label="Category" value={openExpense.category || "—"} tone="muted" />
+            <RowField label="Date" value={openExpense.spentOn ?? "no date"} tone="muted" />
+            <RowField
+              label="Charged to"
+              value={
+                openExpenseJob
+                  ? openExpenseJob.customer
+                  : openExpense.jobId
+                    ? `job #${openExpense.jobId}`
+                    : "Overhead, not a job"
+              }
+              tone={openExpenseJob ? "plain" : "muted"}
+            />
+          </dl>
+
+          {openExpenseJob ? (
+            <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              This is inside {openExpenseJob.customer}&apos;s job cost, so it is charged to that job
+              rather than to overhead.
+            </p>
+          ) : null}
+
+          {openExpense.notes ? (
+            <div className="mt-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Notes
+              </p>
+              <p className="mt-1 text-sm break-words whitespace-pre-wrap text-slate-600">
+                {openExpense.notes}
+              </p>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </DetailDialog>
+  );
+
+  const openMarketing = data.marketing.find((item) => item.id === openMarketingId) ?? null;
+  const openMarketingVariance = openMarketing
+    ? openMarketing.plannedMinor - openMarketing.actualMinor
+    : 0;
+
+  const marketingDialog = (
+    <DetailDialog
+      open={openMarketing !== null}
+      title={openMarketing?.campaign || "Monthly budget"}
+      subtitle={openMarketing ? periodLabel(openMarketing.period) : undefined}
+      onClose={() => setOpenMarketingId(null)}
+      footer={
+        openMarketing
+          ? dialogActions(
+              () => {
+                setOpenMarketingId(null);
+                editMarketing(openMarketing);
+              },
+              () => {
+                setOpenMarketingId(null);
+                void removeRow("marketing", openMarketing.id, "marketing row");
+              },
+              () => setOpenMarketingId(null),
+            )
+          : null
+      }
+    >
+      {openMarketing ? (
+        <>
+          <p className="mb-4 text-xs text-slate-500">
+            {openMarketing.campaign
+              ? "One campaign's budget for this month."
+              : "The month's overall marketing budget."}
+          </p>
+
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 @xl:grid-cols-3">
+            <RowField
+              label="Planned"
+              value={money(openMarketing.plannedMinor, openMarketing.currency)}
+              tone="strong"
+            />
+            <RowField
+              label="Spent"
+              value={money(openMarketing.actualMinor, openMarketing.currency)}
+              tone="plain"
+            />
+            <RowField
+              label={openMarketingVariance >= 0 ? "Left to spend" : "Over budget"}
+              value={`${openMarketingVariance >= 0 ? "" : "-"}${money(
+                Math.abs(openMarketingVariance),
+                openMarketing.currency,
+              )}`}
+              tone={openMarketingVariance >= 0 ? "good" : "bad"}
+            />
+            <RowField label="Month" value={periodLabel(openMarketing.period)} tone="muted" />
+          </dl>
+
+          {openMarketing.notes ? (
+            <div className="mt-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Notes
+              </p>
+              <p className="mt-1 text-sm break-words whitespace-pre-wrap text-slate-600">
+                {openMarketing.notes}
+              </p>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </DetailDialog>
   );
 
   /* ---------------- Tabs ---------------- */
@@ -1136,36 +1423,26 @@ export default function FinanceBoard({
 
         <ul className="mt-4 divide-y divide-slate-100">
           {data.expenses.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center gap-3 py-3">
-              <div className="min-w-0 flex-1 basis-full @xl:basis-0">
-                <p className="font-semibold break-words text-navy-900">{item.label}</p>
-                <p className="text-xs break-words text-slate-500">
-                  {item.spentOn ?? "no date"} · {item.category}
-                  {item.jobId
-                    ? ` · charged to ${jobById.get(item.jobId)?.customer ?? `job #${item.jobId}`}`
-                    : " · overhead"}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
+            <li key={item.id} className="relative py-3 transition hover:bg-slate-50">
+              <button
+                type="button"
+                aria-label={`Open ${item.label}`}
+                onClick={() => setOpenExpenseId(item.id)}
+                className="absolute inset-0 z-10 rounded-xl"
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="min-w-0 flex-1 basis-full @xl:basis-0">
+                  <p className="font-semibold break-words text-navy-900">{item.label}</p>
+                  <p className="text-xs break-words text-slate-500">
+                    {item.spentOn ?? "no date"} · {item.category}
+                    {item.jobId
+                      ? ` · charged to ${jobById.get(item.jobId)?.customer ?? `job #${item.jobId}`}`
+                      : " · overhead"}
+                  </p>
+                </div>
                 <span className="font-semibold tabular-nums text-navy-900">
                   {money(item.amountMinor, item.currency)}
                 </span>
-                <button
-                  type="button"
-                  aria-label="Edit cost"
-                  onClick={() => editExpense(item)}
-                  className={iconButtonClass}
-                >
-                  <Icon name="Pencil" className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Delete cost"
-                  onClick={() => void removeRow("expenses", item.id, "cost")}
-                  className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-                >
-                  <Icon name="Trash2" className="h-3.5 w-3.5" />
-                </button>
               </div>
             </li>
           ))}
@@ -1176,6 +1453,8 @@ export default function FinanceBoard({
             </li>
           ) : null}
         </ul>
+
+        {expenseDialog}
       </section>
     </div>
   );
@@ -1390,7 +1669,6 @@ export default function FinanceBoard({
                 <th className="px-4 py-3 whitespace-nowrap text-right">Cost</th>
                 <th className="px-4 py-3 whitespace-nowrap text-right">Profit</th>
                 <th className="px-4 py-3 whitespace-nowrap">Closed</th>
-                <th className="px-4 py-3 whitespace-nowrap text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1398,15 +1676,25 @@ export default function FinanceBoard({
                 const cost = jobTotalCostMinor(job, data.expenses, rate);
                 const profit = job.sellPriceMinor - cost;
                 return (
-                  <tr key={job.id}>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-navy-900">{job.customer}</p>
+                  <tr
+                    key={job.id}
+                    onClick={() => setOpenJobId(job.id)}
+                    className="cursor-pointer transition hover:bg-slate-50"
+                  >
+                    <td className="px-4 py-3 align-top">
+                      <button
+                        type="button"
+                        onClick={() => setOpenJobId(job.id)}
+                        className="text-left font-semibold text-navy-900 transition hover:text-solar-600"
+                      >
+                        {job.customer}
+                      </button>
                       <p className="text-xs text-slate-500">
                         {job.location}
                         {job.sizeKwp ? ` · ${Number(job.sizeKwp)} kWp` : ""}
                       </p>
                     </td>
-                    <td className="px-4 py-3">{statusBadge(job)}</td>
+                    <td className="px-4 py-3 align-top">{statusBadge(job)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {money(job.sellPriceMinor, job.currency)}
                     </td>
@@ -1424,15 +1712,12 @@ export default function FinanceBoard({
                       ) : null}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-600">{job.closedOn ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end">{jobActions(job)}</div>
-                    </td>
                   </tr>
                 );
               })}
               {data.jobs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
                     No jobs yet. Add one when you quote, and fill in the cost lines when the supplier
                     invoices come in.
                   </td>
@@ -1447,43 +1732,49 @@ export default function FinanceBoard({
             const cost = jobTotalCostMinor(job, data.expenses, rate);
             const profit = job.sellPriceMinor - cost;
             return (
-              <li key={job.id} className="py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold break-words text-navy-900">{job.customer}</p>
-                    <p className="text-xs break-words text-slate-500">
-                      {job.location}
-                      {job.sizeKwp ? ` · ${Number(job.sizeKwp)} kWp` : ""}
-                    </p>
+              <li key={job.id} className="relative transition hover:bg-slate-50">
+                <button
+                  type="button"
+                  aria-label={`Open ${job.customer}`}
+                  onClick={() => setOpenJobId(job.id)}
+                  className="absolute inset-0 z-10 rounded-xl"
+                />
+                <div className="py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold break-words text-navy-900">{job.customer}</p>
+                      <p className="text-xs break-words text-slate-500">
+                        {job.location}
+                        {job.sizeKwp ? ` · ${Number(job.sizeKwp)} kWp` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0">{statusBadge(job)}</span>
                   </div>
-                  <span className="shrink-0">{statusBadge(job)}</span>
+
+                  <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                    <RowField
+                      label="Sold for"
+                      value={money(job.sellPriceMinor, job.currency)}
+                      tone="strong"
+                    />
+                    <RowField label="Cost" value={money(cost)} tone="muted" />
+                    <RowField
+                      label="Profit"
+                      value={
+                        <>
+                          {money(profit)}
+                          {job.sellPriceMinor > 0 ? (
+                            <span className="ml-1 text-[11px] font-semibold text-slate-400">
+                              {percent((profit / job.sellPriceMinor) * 100)}
+                            </span>
+                          ) : null}
+                        </>
+                      }
+                      tone={profit >= 0 ? "good" : "bad"}
+                    />
+                    <RowField label="Closed" value={job.closedOn ?? "—"} tone="muted" />
+                  </dl>
                 </div>
-
-                <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
-                  <RowField
-                    label="Sold for"
-                    value={money(job.sellPriceMinor, job.currency)}
-                    tone="strong"
-                  />
-                  <RowField label="Cost" value={money(cost)} tone="muted" />
-                  <RowField
-                    label="Profit"
-                    value={
-                      <>
-                        {money(profit)}
-                        {job.sellPriceMinor > 0 ? (
-                          <span className="ml-1 text-[11px] font-semibold text-slate-400">
-                            {percent((profit / job.sellPriceMinor) * 100)}
-                          </span>
-                        ) : null}
-                      </>
-                    }
-                    tone={profit >= 0 ? "good" : "bad"}
-                  />
-                  <RowField label="Closed" value={job.closedOn ?? "—"} tone="muted" />
-                </dl>
-
-                <div className="mt-2.5">{jobActions(job)}</div>
               </li>
             );
           })}
@@ -1494,6 +1785,8 @@ export default function FinanceBoard({
             </li>
           ) : null}
         </ul>
+
+        {jobDialog}
       </section>
     </div>
   );
@@ -1631,44 +1924,37 @@ export default function FinanceBoard({
           {monthMarketing.map((item) => {
             const variance = item.plannedMinor - item.actualMinor;
             return (
-              <li key={item.id} className="flex flex-wrap items-center gap-3 py-3.5">
-                <div className="min-w-0 flex-1 basis-full @xl:basis-0">
-                  <p className="font-semibold break-words text-navy-900">
-                    {item.campaign || "Monthly budget"}
-                  </p>
-                  <p className="line-clamp-2 text-xs break-words text-slate-500" title={item.notes || undefined}>
-                    {item.notes || "-"}
-                  </p>
-                </div>
-                <div className="text-xs text-slate-500 @xl:text-right">
-                  <p>planned {money(item.plannedMinor, item.currency)}</p>
-                  <p>spent {money(item.actualMinor, item.currency)}</p>
-                </div>
-                <span
-                  className={`text-sm font-bold tabular-nums @xl:w-28 @xl:text-right ${
-                    variance >= 0 ? "text-emerald-700" : "text-red-600"
-                  }`}
-                >
-                  {variance >= 0 ? "+" : ""}
-                  {money(variance, item.currency)}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    aria-label="Edit marketing row"
-                    onClick={() => editMarketing(item)}
-                    className={iconButtonClass}
+              <li key={item.id} className="relative transition hover:bg-slate-50">
+                <button
+                  type="button"
+                  aria-label={`Open ${item.campaign || "monthly budget"}`}
+                  onClick={() => setOpenMarketingId(item.id)}
+                  className="absolute inset-0 z-10 rounded-xl"
+                />
+                <div className="flex flex-wrap items-center gap-3 py-3.5">
+                  <div className="min-w-0 flex-1 basis-full @xl:basis-0">
+                    <p className="font-semibold break-words text-navy-900">
+                      {item.campaign || "Monthly budget"}
+                    </p>
+                    <p
+                      className="line-clamp-2 text-xs break-words text-slate-500"
+                      title={item.notes || undefined}
+                    >
+                      {item.notes || "-"}
+                    </p>
+                  </div>
+                  <div className="text-xs text-slate-500 @xl:text-right">
+                    <p>planned {money(item.plannedMinor, item.currency)}</p>
+                    <p>spent {money(item.actualMinor, item.currency)}</p>
+                  </div>
+                  <span
+                    className={`text-sm font-bold tabular-nums @xl:w-28 @xl:text-right ${
+                      variance >= 0 ? "text-emerald-700" : "text-red-600"
+                    }`}
                   >
-                    <Icon name="Pencil" className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Delete marketing row"
-                    onClick={() => void removeRow("marketing", item.id, "marketing row")}
-                    className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-                  >
-                    <Icon name="Trash2" className="h-3.5 w-3.5" />
-                  </button>
+                    {variance >= 0 ? "+" : ""}
+                    {money(variance, item.currency)}
+                  </span>
                 </div>
               </li>
             );
@@ -1679,6 +1965,8 @@ export default function FinanceBoard({
             </li>
           ) : null}
         </ul>
+
+        {marketingDialog}
       </section>
     </div>
   );
