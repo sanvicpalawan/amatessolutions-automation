@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import DetailDialog from "@/components/admin/DetailDialog";
 import RowField from "@/components/admin/RowField";
 import { Icon } from "@/lib/icons";
 import {
@@ -141,7 +142,7 @@ const smallFieldClass =
 const primaryButtonClass =
   "rounded-full bg-solar-400 px-5 py-2 text-[11px] font-bold uppercase tracking-wider text-navy-950 transition hover:bg-solar-300 disabled:opacity-60";
 const ghostButtonClass =
-  "rounded-full border border-slate-300 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 transition hover:border-slate-400";
+  "rounded-full border border-slate-300 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 transition hover:border-slate-400 disabled:opacity-60";
 const iconButtonClass =
   "rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-navy-900";
 
@@ -171,6 +172,8 @@ export default function FinanceBoard({
   );
 
   const [recurringDraft, setRecurringDraft] = useState<RecurringDraft | null>(null);
+  /** The subscription whose popup is open. */
+  const [openRecurringId, setOpenRecurringId] = useState<number | null>(null);
   const [jobDraft, setJobDraft] = useState<JobDraft | null>(null);
   const [marketingDraft, setMarketingDraft] = useState<MarketingDraft | null>(null);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
@@ -424,33 +427,120 @@ export default function FinanceBoard({
       </span>
     ) : null;
 
-  /** Shared by the wide subscription table and the narrow subscription card. */
-  const recurringActions = (item: RecurringItem) => (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => void toggleRecurring(item)}
-        className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-solar-400 hover:text-solar-600"
-      >
-        {item.active ? "Pause" : "Resume"}
-      </button>
-      <button
-        type="button"
-        aria-label="Edit subscription"
-        onClick={() => editRecurring(item)}
-        className={iconButtonClass}
-      >
-        <Icon name="Pencil" className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        aria-label="Delete subscription"
-        onClick={() => void removeRow("recurring", item.id, "subscription")}
-        className={`${iconButtonClass} hover:border-red-300 hover:text-red-500`}
-      >
-        <Icon name="Trash2" className="h-3.5 w-3.5" />
-      </button>
-    </div>
+  /**
+   * Clicking a subscription opens this instead of offering three small buttons
+   * in the row. "Pause" was never clear - it means "stop counting this in the
+   * monthly overhead", which is what the button now says.
+   */
+  const openRecurring = data.recurring.find((item) => item.id === openRecurringId) ?? null;
+
+  const recurringDialog = (
+    <DetailDialog
+      open={openRecurring !== null}
+      title={openRecurring?.name ?? ""}
+      subtitle={openRecurring?.vendor || undefined}
+      onClose={() => setOpenRecurringId(null)}
+      footer={
+        openRecurring ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setOpenRecurringId(null);
+                editRecurring(openRecurring);
+              }}
+              className={primaryButtonClass}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void toggleRecurring(openRecurring)}
+              className={ghostButtonClass}
+              title="Leave it out of the monthly overhead and the profit and loss, but keep the record."
+            >
+              {openRecurring.active ? "Leave out of monthly cost" : "Put back in monthly cost"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setOpenRecurringId(null);
+                void removeRow("recurring", openRecurring.id, "subscription");
+              }}
+              className={`${ghostButtonClass} hover:border-red-300 hover:text-red-500`}
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpenRecurringId(null)}
+              className="ml-auto text-[11px] font-bold uppercase tracking-wider text-slate-500 transition hover:text-navy-900"
+            >
+              {busy ? "Saving…" : "Close"}
+            </button>
+          </div>
+        ) : null
+      }
+    >
+      {openRecurring ? (
+        <>
+          {openRecurring.active ? null : (
+            <p className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              This is left out of the monthly overhead and the profit and loss.
+            </p>
+          )}
+
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 @xl:grid-cols-3">
+            <RowField
+              label="Per month"
+              value={money(monthlyEquivalentMinor(openRecurring, rate))}
+              tone="strong"
+            />
+            <RowField
+              label="Billed"
+              value={
+                openRecurring.plan === "free" ? (
+                  "Free plan"
+                ) : (
+                  <span className="capitalize">{openRecurring.cycle}</span>
+                )
+              }
+              tone="muted"
+            />
+            <RowField
+              label="Amount"
+              value={
+                openRecurring.plan === "free"
+                  ? "—"
+                  : money(openRecurring.amountMinor, openRecurring.currency)
+              }
+              tone="muted"
+            />
+            <RowField label="Category" value={openRecurring.category || "—"} tone="muted" />
+            <RowField label="Next renewal" value={openRecurring.nextRenewal ?? "—"} tone="muted" />
+            <RowField
+              label="Status"
+              value={openRecurring.active ? "In the monthly total" : "Left out"}
+              tone={openRecurring.active ? "good" : "muted"}
+            />
+          </dl>
+
+          {openRecurring.notes ? (
+            <div className="mt-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Notes
+              </p>
+              <p className="mt-1 text-sm break-words whitespace-pre-wrap text-slate-600">
+                {openRecurring.notes}
+              </p>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </DetailDialog>
   );
 
   const statusBadge = (job: JobItem) => (
@@ -789,7 +879,7 @@ export default function FinanceBoard({
           </div>
         ) : null}
 
-        {/* A real table once seven columns fit, cards below that. */}
+        {/* A real table once six columns fit, cards below that. */}
         <div className="mt-4 hidden overflow-x-auto @4xl:block">
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
@@ -800,14 +890,30 @@ export default function FinanceBoard({
                 <th className="px-4 py-3 whitespace-nowrap text-right">Per month</th>
                 <th className="px-4 py-3 whitespace-nowrap">Category</th>
                 <th className="px-4 py-3 whitespace-nowrap">Renews</th>
-                <th className="px-4 py-3 whitespace-nowrap text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {data.recurring.map((item) => (
-                <tr key={item.id} className={item.active ? undefined : "opacity-50"}>
+                <tr
+                  key={item.id}
+                  onClick={() => setOpenRecurringId(item.id)}
+                  className={`cursor-pointer transition hover:bg-slate-50 ${
+                    item.active ? "" : "opacity-50"
+                  }`}
+                >
                   <td className="px-4 py-3 align-top">
-                    <p className="font-semibold text-navy-900">{item.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => setOpenRecurringId(item.id)}
+                      className="text-left font-semibold text-navy-900 transition hover:text-solar-600"
+                    >
+                      {item.name}
+                    </button>
+                    {item.active ? null : (
+                      <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        left out
+                      </span>
+                    )}
                     <p className="text-xs text-slate-500">{item.vendor || "—"}</p>
                     {item.notes ? (
                       <p
@@ -829,14 +935,11 @@ export default function FinanceBoard({
                   </td>
                   <td className="px-4 py-3 text-xs capitalize text-slate-600">{item.category}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">{item.nextRenewal ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end">{recurringActions(item)}</div>
-                  </td>
                 </tr>
               ))}
               {data.recurring.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
                     Nothing yet. Add UpCloud, Supabase, Neon, GitHub and Cloudflare — free plans too,
                     so you can see what you are not paying for.
                   </td>
@@ -846,44 +949,71 @@ export default function FinanceBoard({
           </table>
         </div>
 
-        {/* The same seven columns cannot be squeezed, so each bill is a card. */}
+        {/* The same six columns cannot be squeezed, so each bill is a card. */}
         <ul className="mt-2 divide-y divide-slate-100 @4xl:hidden">
           {data.recurring.map((item) => (
-            <li key={item.id} className={`py-4 ${item.active ? "" : "opacity-50"}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold break-words text-navy-900">{item.name}</p>
-                  <p className="text-xs break-words text-slate-500">{item.vendor || "—"}</p>
+            <li
+              key={item.id}
+              className={`relative transition hover:bg-slate-50 ${
+                item.active ? "" : "opacity-50"
+              }`}
+            >
+              {/* Covers the card so a tap anywhere opens it, without nesting
+                  interactive content inside a button. The padding lives on the
+                  inner wrapper so the overlay reaches the card's edges. */}
+              <button
+                type="button"
+                aria-label={`Open ${item.name}`}
+                onClick={() => setOpenRecurringId(item.id)}
+                className="absolute inset-0 z-10 rounded-xl"
+              />
+              <div className="py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold break-words text-navy-900">{item.name}</p>
+                    <p className="text-xs break-words text-slate-500">{item.vendor || "—"}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {item.plan === "free" ? (
+                      planBadge(item)
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        {item.cycle}
+                      </span>
+                    )}
+                    {item.active ? null : (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        left out
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {item.plan === "free" ? (
-                  <span className="shrink-0">{planBadge(item)}</span>
-                ) : (
-                  <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                    {item.cycle}
-                  </span>
-                )}
+
+                {item.notes ? (
+                  <p className="mt-1.5 line-clamp-3 text-xs break-words text-slate-400">
+                    {item.notes}
+                  </p>
+                ) : null}
+
+                <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                  <RowField
+                    label="Billed"
+                    value={item.plan === "free" ? "—" : money(item.amountMinor, item.currency)}
+                    tone="muted"
+                  />
+                  <RowField
+                    label="Per month"
+                    value={money(monthlyEquivalentMinor(item, rate))}
+                    tone="strong"
+                  />
+                  <RowField label="Category" value={item.category || "—"} tone="muted" />
+                  <RowField label="Renews" value={item.nextRenewal ?? "—"} tone="muted" />
+                </dl>
+
+                <p className="mt-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Tap for details
+                </p>
               </div>
-
-              {item.notes ? (
-                <p className="mt-1.5 line-clamp-3 text-xs break-words text-slate-400">{item.notes}</p>
-              ) : null}
-
-              <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
-                <RowField
-                  label="Billed"
-                  value={item.plan === "free" ? "—" : money(item.amountMinor, item.currency)}
-                  tone="muted"
-                />
-                <RowField
-                  label="Per month"
-                  value={money(monthlyEquivalentMinor(item, rate))}
-                  tone="strong"
-                />
-                <RowField label="Category" value={item.category || "—"} tone="muted" />
-                <RowField label="Renews" value={item.nextRenewal ?? "—"} tone="muted" />
-              </dl>
-
-              <div className="mt-2.5">{recurringActions(item)}</div>
             </li>
           ))}
           {data.recurring.length === 0 ? (
@@ -893,6 +1023,8 @@ export default function FinanceBoard({
             </li>
           ) : null}
         </ul>
+
+        {recurringDialog}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
