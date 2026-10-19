@@ -509,7 +509,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
 
         {productDraft ? (
           <div className="mt-4 rounded-2xl border border-solar-300 bg-solar-50/40 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
               <div>
                 <label className={labelClass} htmlFor="prod-brand">
                   Brand
@@ -671,7 +671,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                   }
                 />
               </div>
-              <div className="sm:col-span-2 lg:col-span-1">
+              <div className="@xl:col-span-2 @4xl:col-span-1">
                 <label className={labelClass} htmlFor="prod-url">
                   Datasheet link
                 </label>
@@ -685,7 +685,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                   }
                 />
               </div>
-              <div className="sm:col-span-2 lg:col-span-3">
+              <div className="@xl:col-span-2 @4xl:col-span-3">
                 <label className={labelClass} htmlFor="prod-specs">
                   Specs
                 </label>
@@ -700,7 +700,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                   }
                 />
               </div>
-              <div className="sm:col-span-2 lg:col-span-3">
+              <div className="@xl:col-span-2 @4xl:col-span-3">
                 <label className={labelClass} htmlFor="prod-notes">
                   Notes
                 </label>
@@ -971,8 +971,8 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
 
         {packageDraft ? (
           <div className="mt-4 rounded-2xl border border-solar-300 bg-solar-50/40 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="sm:col-span-2 lg:col-span-1">
+            <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
+              <div className="@xl:col-span-2 @4xl:col-span-1">
                 <label className={labelClass} htmlFor="pkg-name">
                   Package name
                 </label>
@@ -1055,7 +1055,7 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                 </div>
               )}
 
-              <div className="sm:col-span-2 lg:col-span-3">
+              <div className="@xl:col-span-2 @4xl:col-span-3">
                 <label className={labelClass} htmlFor="pkg-desc">
                   Description
                 </label>

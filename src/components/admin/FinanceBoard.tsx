@@ -646,8 +646,8 @@ export default function FinanceBoard({
 
         {recurringDraft ? (
           <div className="mt-4 rounded-2xl border border-solar-300 bg-solar-50/40 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="sm:col-span-2 lg:col-span-1">
+            <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
+              <div className="@xl:col-span-2 @4xl:col-span-1">
                 <label className={labelClass} htmlFor="rec-name">
                   What is it
                 </label>
@@ -764,7 +764,7 @@ export default function FinanceBoard({
                   }
                 />
               </div>
-              <div className="sm:col-span-2 lg:col-span-3">
+              <div className="@xl:col-span-2 @4xl:col-span-3">
                 <label className={labelClass} htmlFor="rec-notes">
                   Notes
                 </label>
@@ -917,8 +917,8 @@ export default function FinanceBoard({
 
         {expenseDraft ? (
           <div className="mt-4 rounded-2xl border border-solar-300 bg-solar-50/40 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="sm:col-span-2">
+            <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
+              <div className="@xl:col-span-2">
                 <label className={labelClass} htmlFor="exp-label">
                   What was bought
                 </label>
@@ -1070,7 +1070,7 @@ export default function FinanceBoard({
 
         {jobDraft ? (
           <div className="mt-4 rounded-2xl border border-solar-300 bg-solar-50/40 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
               <div>
                 <label className={labelClass} htmlFor="job-customer">
                   Customer
@@ -1215,7 +1215,7 @@ export default function FinanceBoard({
               </button>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 @xl:grid-cols-2">
               <div className="rounded-xl bg-white px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   Cost so far
@@ -1390,7 +1390,7 @@ export default function FinanceBoard({
 
         {marketingDraft ? (
           <div className="mt-4 rounded-2xl border border-solar-300 bg-solar-50/40 p-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
               <div>
                 <label className={labelClass} htmlFor="mk-period">
                   Month
@@ -1441,7 +1441,7 @@ export default function FinanceBoard({
                   onChange={(event) => setMarketingDraft({ ...marketingDraft, actual: event.target.value })}
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="@xl:col-span-2">
                 <label className={labelClass} htmlFor="mk-notes">
                   Notes
                 </label>
