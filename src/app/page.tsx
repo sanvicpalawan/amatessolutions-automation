@@ -1,3 +1,4 @@
+import CoverageMap from "@/components/site/CoverageMap";
 import Footer from "@/components/site/Footer";
 import Hero from "@/components/site/Hero";
 import IntakeForm from "@/components/site/IntakeForm";
@@ -24,6 +25,11 @@ export default async function HomePage() {
       <WhyAmates content={content} />
       <StepFramework content={content} />
       <Verticals content={content} />
+      <CoverageMap
+        towns={content.heroSubCities}
+        featured="Linapacan"
+        featuredNote={content.reviewSiteName}
+      />
       <ProjectReview content={content} />
       <IntakeForm content={content} />
       <Footer content={content} nav={nav} social={social} />
