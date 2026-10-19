@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -289,9 +290,111 @@ export const noteComments = pgTable(
   (table) => [index("note_comments_note_idx").on(table.noteId)],
 );
 
+/* ------------------------------------------------------------------ *
+ * Finance
+ *
+ * The studio has no office and no payroll, so subscriptions plus marketing
+ * ARE the monthly overhead. Solar materials are bought per job from local
+ * suppliers, so they are costed per job rather than estimated up front.
+ *
+ * Money is stored as whole centavos in an integer column — never a float,
+ * because rounding drift in a ledger is a real bug. The ceiling is about
+ * ₱21.4M per row, clear of any single subscription or job.
+ * ------------------------------------------------------------------ */
+
+/** Recurring costs: platform subscriptions and bills. The real overhead. */
+export const finRecurring = pgTable("fin_recurring", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  vendor: text("vendor").notNull().default(""),
+  amountMinor: integer("amount_minor").notNull().default(0),
+  /** "PHP" | "USD". USD rows are converted with the rate in finance config. */
+  currency: text("currency").notNull().default("PHP"),
+  /** monthly | quarterly | yearly — normalised to a monthly figure for the P&L. */
+  cycle: text("cycle").notNull().default("monthly"),
+  /** free | paid. Free plans are still listed, so they get reviewed not forgotten. */
+  plan: text("plan").notNull().default("paid"),
+  category: text("category").notNull().default("hosting"),
+  nextRenewal: date("next_renewal"),
+  active: boolean("active").notNull().default(true),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A solar job: what it sold for, and what the parts and crew actually cost. */
+export const finJobs = pgTable(
+  "fin_jobs",
+  {
+    id: serial("id").primaryKey(),
+    customer: text("customer").notNull(),
+    location: text("location").notNull().default("Palawan"),
+    sizeKwp: numeric("size_kwp", { precision: 8, scale: 2 }),
+    /** quoted | won | installing | completed | lost */
+    status: text("status").notNull().default("quoted"),
+    sellPriceMinor: integer("sell_price_minor").notNull().default(0),
+    currency: text("currency").notNull().default("PHP"),
+    /**
+     * `[{ label, amountMinor }]`. Deliberately free-form: local suppliers
+     * price per order, so there is no fixed bill of materials to model.
+     */
+    costLines: jsonb("cost_lines").notNull().default([]),
+    /** Which month the money landed. Jobs without it are never counted as revenue. */
+    closedOn: date("closed_on"),
+    leadId: integer("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("fin_jobs_closed_idx").on(table.closedOn)],
+);
+
+/**
+ * Marketing: one row per month, plus optional rows per campaign.
+ * A row with an empty `campaign` is that month's overall budget figure, so a
+ * single monthly number and detailed campaigns are the same table.
+ */
+export const finMarketing = pgTable(
+  "fin_marketing",
+  {
+    id: serial("id").primaryKey(),
+    /** "YYYY-MM". */
+    period: text("period").notNull(),
+    campaign: text("campaign").notNull().default(""),
+    plannedMinor: integer("planned_minor").notNull().default(0),
+    actualMinor: integer("actual_minor").notNull().default(0),
+    currency: text("currency").notNull().default("PHP"),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("fin_marketing_period_idx").on(table.period)],
+);
+
+/**
+ * One-off costs that are neither a job cost nor marketing: a domain, a tool
+ * licence, a permit fee. Attaching a `jobId` moves the cost into that job and
+ * out of monthly overhead, so nothing is counted twice.
+ */
+export const finExpenses = pgTable("fin_expenses", {
+  id: serial("id").primaryKey(),
+  label: text("label").notNull(),
+  amountMinor: integer("amount_minor").notNull().default(0),
+  currency: text("currency").notNull().default("PHP"),
+  category: text("category").notNull().default("other"),
+  spentOn: date("spent_on"),
+  jobId: integer("job_id").references(() => finJobs.id, { onDelete: "set null" }),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type MediaAsset = typeof mediaAssets.$inferSelect;
 export type NoteRow = typeof notes.$inferSelect;
 export type NoteComment = typeof noteComments.$inferSelect;
+export type FinRecurring = typeof finRecurring.$inferSelect;
+export type FinJob = typeof finJobs.$inferSelect;
+export type FinMarketing = typeof finMarketing.$inferSelect;
+export type FinExpense = typeof finExpenses.$inferSelect;
 export type NavItem = typeof navItems.$inferSelect;
 export type SocialLink = typeof socialLinks.$inferSelect;
 export type BlogPost = typeof blogPosts.$inferSelect;

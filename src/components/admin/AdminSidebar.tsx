@@ -14,6 +14,7 @@ const NAV = [
   { href: "/admin/blog", label: "Blog", icon: "FileText" },
   { href: "/admin/editor", label: "Site editor", icon: "Palette" },
   { href: "/admin/calendar", label: "Bookings", icon: "Calendar" },
+  { href: "/admin/finance", label: "Finance", icon: "ChartLine" },
   { href: "/admin/monitoring", label: "Monitoring", icon: "Activity" },
   { href: "/admin/settings", label: "OpenRouter", icon: "Sliders" },
 ];

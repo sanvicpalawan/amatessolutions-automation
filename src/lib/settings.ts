@@ -14,6 +14,7 @@ export const SETTINGS_KEYS = {
   openrouterApiKey: "openrouter_api_key",
   whatsapp: "whatsapp_config",
   whatsappAccessToken: "whatsapp_access_token",
+  finance: "finance_config",
 } as const;
 
 export type OpenRouterConfig = {
@@ -178,4 +179,31 @@ export function saveStoredWhatsappToken(token: string): Promise<void> {
 /** Removes the admin-stored token. A `WHATSAPP_ACCESS_TOKEN` env var is untouched. */
 export function clearStoredWhatsappToken(): Promise<void> {
   return clearStoredSecret(SETTINGS_KEYS.whatsappAccessToken);
+}
+
+/* ------------------------------------------------------------------ *
+ * Finance
+ * ------------------------------------------------------------------ */
+
+/**
+ * Ledger-wide settings. Only the exchange rate for now.
+ *
+ * It defaults to 0, meaning "not set", rather than a plausible-looking number.
+ * A guessed rate would quietly distort every profit figure on the page, and
+ * showing the subscription amount in the wrong currency is worse than showing
+ * a prompt to set the rate.
+ */
+export type FinanceConfig = {
+  /** How many pesos one US dollar buys. 0 = not set yet. */
+  usdToPhp: number;
+};
+
+export const DEFAULT_FINANCE_CONFIG: FinanceConfig = { usdToPhp: 0 };
+
+export function getFinanceConfig(): Promise<FinanceConfig> {
+  return readSetting(SETTINGS_KEYS.finance, DEFAULT_FINANCE_CONFIG);
+}
+
+export function saveFinanceConfig(config: FinanceConfig): Promise<void> {
+  return writeSetting(SETTINGS_KEYS.finance, config);
 }
