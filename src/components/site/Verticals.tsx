@@ -1,6 +1,7 @@
 import BentoCard from "@/components/site/BentoCard";
 import Reveal from "@/components/site/Reveal";
-import { Icon } from "@/lib/icons";
+import SectionLabel from "@/components/site/SectionLabel";
+import SplitHeading from "@/components/site/SplitHeading";
 import { VERTICALS } from "@/lib/knowledge";
 import { mediaSrc, type SiteContent } from "@/lib/site";
 
@@ -8,18 +9,17 @@ import { VERTICAL_ICONS } from "@/lib/icon-names";
 
 export default function Verticals({ content }: { content: SiteContent }) {
   return (
-    <section id="services" className="relative bg-slate-50 py-20 sm:py-28">
+    <section id="services" className="relative bg-white py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-solar-300/60 bg-solar-50 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-solar-700">
-            <Icon name="Layers" className="h-3.5 w-3.5" strokeWidth={2.4} />
-            {content.servicesEyebrow}
-          </span>
-          <h2 className="mt-5 text-h2 font-extrabold uppercase tracking-tight text-navy-900">
-            {content.servicesTitle}
-          </h2>
-          <p className="mt-4 text-[15px] leading-relaxed text-slate-600">{content.servicesBody}</p>
-        </Reveal>
+        <div className="grid gap-8 lg:grid-cols-12 lg:items-end">
+          <div className="lg:col-span-8">
+            <SectionLabel index="03">{content.servicesEyebrow}</SectionLabel>
+            <SplitHeading className="mt-6 text-h2 font-bold text-navy-900" lines={[content.servicesTitle]} />
+          </div>
+          <Reveal delay={150} className="lg:col-span-4">
+            <p className="text-[15px] leading-relaxed text-slate-600">{content.servicesBody}</p>
+          </Reveal>
+        </div>
 
         <div className="mt-14 grid gap-5 lg:grid-cols-6">
           {VERTICALS.map((vertical, index) => {

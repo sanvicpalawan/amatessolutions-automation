@@ -3,6 +3,7 @@ import Footer from "@/components/site/Footer";
 import Hero from "@/components/site/Hero";
 import IntakeForm from "@/components/site/IntakeForm";
 import ProjectReview from "@/components/site/ProjectReview";
+import ScrollProgress from "@/components/site/ScrollProgress";
 import SiteNav from "@/components/site/SiteNav";
 import StepFramework from "@/components/site/StepFramework";
 import Verticals from "@/components/site/Verticals";
@@ -20,6 +21,7 @@ export default async function HomePage() {
 
   return (
     <main className="min-h-screen bg-white">
+      <ScrollProgress />
       <SiteNav nav={nav} social={social} content={content} />
       <Hero content={content} />
       <WhyAmates content={content} />

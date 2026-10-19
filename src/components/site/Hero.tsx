@@ -1,60 +1,46 @@
+import CountUp from "@/components/site/CountUp";
 import HeroSun from "@/components/site/HeroSun";
+import Marquee from "@/components/site/Marquee";
+import ParallaxImage from "@/components/site/ParallaxImage";
+import SplitHeading from "@/components/site/SplitHeading";
 import { Icon } from "@/lib/icons";
 import { mediaSrc, type SiteContent } from "@/lib/site";
 
+const COUNTABLE = /^\d+(\.\d+)?\s?[A-Za-z%]*$/;
+
 export default function Hero({ content }: { content: SiteContent }) {
   return (
-    <section className="relative isolate flex min-h-[94vh] items-center overflow-hidden bg-navy-950">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={mediaSrc(content.heroImage)}
-        alt={content.heroTitleLine2}
-        className="absolute inset-0 h-full w-full object-cover opacity-55"
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-navy-950/85 via-navy-950/70 to-navy-950" />
-      <div className="absolute -right-24 top-24 h-72 w-72 animate-sun rounded-full bg-solar-400/25 blur-3xl" />
+    <section className="relative isolate overflow-hidden bg-navy-950">
+      <ParallaxImage src={mediaSrc(content.heroImage)} alt={content.heroTitleLine2} className="opacity-60" />
+      <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/75 to-navy-950/10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-transparent to-navy-950/50" />
 
-      <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 hidden -translate-y-1/2 xl:block">
-        <div className="mx-auto flex max-w-6xl justify-end px-8">
-          <div className="animate-rise pointer-events-auto" style={{ animationDelay: "250ms" }}>
+      <div className="pointer-events-none absolute inset-x-0 top-32 z-10 hidden min-[1360px]:block">
+        <div className="mx-auto flex max-w-7xl justify-end px-8">
+          <div className="animate-rise pointer-events-auto" style={{ animationDelay: "500ms" }}>
             <HeroSun />
           </div>
         </div>
       </div>
 
-      <div className="relative mx-auto w-full max-w-6xl px-5 pb-20 pt-36 sm:px-8 sm:pt-40">
-        <div className="animate-rise max-w-3xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-solar-400/40 bg-solar-400/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-solar-200">
-            <span className="h-1.5 w-1.5 rounded-full bg-solar-300" />
-            {content.heroEyebrow}
-          </span>
+      <div className="relative mx-auto flex min-h-[92vh] max-w-7xl flex-col justify-end px-5 pb-12 pt-36 sm:px-8">
+        <div className="animate-rise flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-solar-300">
+          <span className="h-px w-10 bg-current" />
+          {content.heroEyebrow}
+          <span className="hidden text-slate-400 sm:inline">9.74°N · 118.74°E</span>
+        </div>
 
-          <h1 className="mt-6 text-hero font-extrabold uppercase tracking-tight text-white">
-            {content.heroTitleLine1}
-            <br />
-            <span className="bg-gradient-to-r from-solar-200 via-solar-400 to-solar-600 bg-clip-text text-transparent">
-              Solar Hybrid
-            </span>
-            <br />
-            Systems
-          </h1>
+        <SplitHeading
+          as="h1"
+          delay={150}
+          className="mt-6 text-hero font-bold text-white"
+          lines={[content.heroTitleLine1, { text: content.heroTitleLine2, accent: true }]}
+          accentClassName="bg-gradient-to-r from-solar-200 via-solar-400 to-solar-600 bg-clip-text text-transparent"
+        />
 
-          <p className="mt-6 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
-            {content.heroSubtitle}
-          </p>
-
-          <div className="mt-7 flex flex-wrap gap-2">
-            {content.heroSubCities.map((city) => (
-              <span
-                key={city}
-                className="rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-sm"
-              >
-                {city}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="animate-rise mt-9 grid gap-8 lg:grid-cols-12 lg:items-end" style={{ animationDelay: "600ms" }}>
+          <p className="max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg lg:col-span-6">{content.heroSubtitle}</p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center lg:col-span-6 lg:justify-end">
             <a
               href="#quote"
               className="group inline-flex items-center justify-center gap-2 rounded-full bg-solar-400 px-8 py-4 text-sm font-bold uppercase tracking-wider text-navy-950 shadow-xl shadow-solar-500/25 transition hover:-translate-y-0.5 hover:bg-solar-300"
@@ -64,22 +50,27 @@ export default function Hero({ content }: { content: SiteContent }) {
             </a>
             <a
               href="#process"
-              className="inline-flex items-center justify-center rounded-full border border-white/25 px-8 py-4 text-sm font-semibold uppercase tracking-wider text-white transition hover:border-solar-300 hover:text-solar-300"
+              className="group relative inline-flex items-center justify-center px-2 py-3 text-sm font-semibold uppercase tracking-wider text-white"
             >
               {content.heroCtaSecondary}
+              <span className="absolute inset-x-2 bottom-2 h-px origin-left bg-solar-300 transition-transform duration-500 group-hover:scale-x-0" />
             </a>
           </div>
         </div>
 
-        <dl className="mt-16 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-4">
-          {content.heroStats.map((stat) => (
-            <div key={stat.k} className="bg-navy-950/80 px-5 py-5 backdrop-blur">
-              <dt className="text-xl font-bold text-solar-300 sm:text-2xl">{stat.k}</dt>
-              <dd className="mt-1 text-[11px] uppercase tracking-wider text-slate-400">{stat.v}</dd>
+        <dl className="mt-14 grid grid-cols-2 border-t border-white/15 sm:grid-cols-4">
+          {content.heroStats.map((stat, index) => (
+            <div key={stat.k} className={`py-6 pr-4 ${index > 0 ? "sm:border-l sm:border-white/10 sm:pl-6" : ""}`}>
+              <dt className="font-display text-3xl font-bold tracking-tight text-white sm:text-5xl">
+                {COUNTABLE.test(stat.k) ? <CountUp value={stat.k} onView duration={1400} /> : stat.k}
+              </dt>
+              <dd className="mt-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">{stat.v}</dd>
             </div>
           ))}
         </dl>
       </div>
+
+      <Marquee items={content.heroSubCities} className="relative border-t border-white/10 bg-navy-950/80 py-4 backdrop-blur" />
     </section>
   );
 }

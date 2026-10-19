@@ -3,6 +3,8 @@
 import { useState } from "react";
 
 import Reveal from "@/components/site/Reveal";
+import SectionLabel from "@/components/site/SectionLabel";
+import SplitHeading from "@/components/site/SplitHeading";
 import { PALAWAN_PATH, PALAWAN_TOWNS } from "@/lib/palawan-geo";
 
 /** Palawan service-area map. Dots mark where Amates works, not individual installs. */
@@ -19,18 +21,17 @@ export default function CoverageMap({
   const places = towns.filter((town) => PALAWAN_TOWNS[town]);
 
   return (
-    <section id="coverage" className="relative overflow-hidden bg-navy-950 py-20 sm:py-28">
+    <section id="coverage" className="relative overflow-hidden bg-navy-950 py-24 sm:py-32">
       <div className="pointer-events-none absolute -left-32 top-10 h-80 w-80 rounded-full bg-solar-500/10 blur-3xl" />
       <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 sm:px-8 lg:grid-cols-[1fr_1.1fr]">
         <Reveal from="left">
-          <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-solar-400">Coverage</span>
-          <h2 className="mt-4 text-h2 font-extrabold uppercase tracking-tight text-white">
-            From Puerto Princesa
-            <br />
-            <span className="bg-gradient-to-r from-solar-300 to-solar-600 bg-clip-text text-transparent">
-              to the far islands
-            </span>
-          </h2>
+          <SectionLabel index="04" tone="dark">
+            Coverage
+          </SectionLabel>
+          <SplitHeading
+            className="mt-6 text-h2 font-bold text-white"
+            lines={["From Puerto Princesa", { text: "to the far islands", accent: true }]}
+          />
           <p className="mt-4 max-w-md text-[15px] leading-relaxed text-slate-300">
             Our crews work across the archipelago, so remote sites get the same marine-grade install and
             remote monitoring as the city.

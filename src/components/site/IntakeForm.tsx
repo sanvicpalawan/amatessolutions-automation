@@ -1,5 +1,7 @@
 "use client";
 
+import SectionLabel from "@/components/site/SectionLabel";
+import SplitHeading from "@/components/site/SplitHeading";
 import { useState } from "react";
 
 import InstantEstimate from "@/components/site/InstantEstimate";
@@ -85,16 +87,12 @@ export default function IntakeForm({ content }: { content: SiteContent }) {
   }
 
   return (
-    <section id="quote" className="bg-slate-50 py-20 sm:py-28">
+    <section id="quote" className="bg-[var(--brand-surface-muted)] py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="grid gap-10 lg:grid-cols-[1fr_1.15fr]">
           <div className="lg:pt-6">
-            <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-solar-600">
-              {content.quoteEyebrow}
-            </span>
-            <h2 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-navy-900 sm:text-4xl">
-              {content.quoteTitle}
-            </h2>
+            <SectionLabel index="06">{content.quoteEyebrow}</SectionLabel>
+            <SplitHeading className="mt-6 text-h2 font-bold text-navy-900" lines={[content.quoteTitle]} />
             <p className="mt-5 text-[15px] leading-relaxed text-slate-600">
               Tell us about your property and energy usage. The more detail you give, the sharper
               the quote. Our team reviews every submission, contacts you by WhatsApp and email, and
