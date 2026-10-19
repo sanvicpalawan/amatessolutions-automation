@@ -134,6 +134,8 @@ const majorInput = (minor: number) => (minor / 100).toFixed(2);
 const labelClass = "block text-[11px] font-bold uppercase tracking-wider text-slate-500";
 const fieldClass =
   "mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 outline-none transition focus:border-solar-400 focus:ring-2 focus:ring-solar-400/30";
+/** Free text is often a paragraph pasted from a supplier page — give it a real box. */
+const textAreaClass = `${fieldClass} resize-y leading-relaxed`;
 const smallFieldClass =
   "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none transition focus:border-solar-400 focus:ring-2 focus:ring-solar-400/30";
 const primaryButtonClass =
@@ -550,11 +552,11 @@ export default function FinanceBoard({
           <table className="w-full min-w-[620px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-5 py-3">Month</th>
-                <th className="px-5 py-3 text-right">Revenue</th>
-                <th className="px-5 py-3 text-right">Job costs</th>
-                <th className="px-5 py-3 text-right">Overhead</th>
-                <th className="px-5 py-3 text-right">Net</th>
+                <th className="px-5 py-3 whitespace-nowrap">Month</th>
+                <th className="px-5 py-3 whitespace-nowrap text-right">Revenue</th>
+                <th className="px-5 py-3 whitespace-nowrap text-right">Job costs</th>
+                <th className="px-5 py-3 whitespace-nowrap text-right">Overhead</th>
+                <th className="px-5 py-3 whitespace-nowrap text-right">Net</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -766,11 +768,12 @@ export default function FinanceBoard({
                 <label className={labelClass} htmlFor="rec-notes">
                   Notes
                 </label>
-                <input
+                <textarea
                   id="rec-notes"
-                  className={fieldClass}
+                  rows={3}
+                  className={textAreaClass}
                   value={recurringDraft.notes}
-                  placeholder="What it is for, when to review it…"
+                  placeholder="What it is for, when to review it… Paste a supplier's plan list here if you like."
                   onChange={(event) => setRecurringDraft({ ...recurringDraft, notes: event.target.value })}
                 />
               </div>
@@ -791,24 +794,29 @@ export default function FinanceBoard({
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3">Item</th>
-                <th className="px-4 py-3">Billed</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3 text-right">Per month</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Renews</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3 whitespace-nowrap">Item</th>
+                <th className="px-4 py-3 whitespace-nowrap">Billed</th>
+                <th className="px-4 py-3 whitespace-nowrap text-right">Amount</th>
+                <th className="px-4 py-3 whitespace-nowrap text-right">Per month</th>
+                <th className="px-4 py-3 whitespace-nowrap">Category</th>
+                <th className="px-4 py-3 whitespace-nowrap">Renews</th>
+                <th className="px-4 py-3 whitespace-nowrap text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {data.recurring.map((item) => (
                 <tr key={item.id} className={item.active ? undefined : "opacity-50"}>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 align-top">
                     <p className="font-semibold text-navy-900">{item.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {item.vendor || "—"}
-                      {item.notes ? ` · ${item.notes}` : ""}
-                    </p>
+                    <p className="text-xs text-slate-500">{item.vendor || "—"}</p>
+                    {item.notes ? (
+                      <p
+                        className="mt-0.5 line-clamp-2 max-w-xl text-xs text-slate-400"
+                        title={item.notes}
+                      >
+                        {item.notes}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-xs capitalize text-slate-600">
                     {item.plan === "free" ? planBadge(item) : item.cycle}
@@ -845,10 +853,7 @@ export default function FinanceBoard({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold break-words text-navy-900">{item.name}</p>
-                  <p className="text-xs break-words text-slate-500">
-                    {item.vendor || "—"}
-                    {item.notes ? ` · ${item.notes}` : ""}
-                  </p>
+                  <p className="text-xs break-words text-slate-500">{item.vendor || "—"}</p>
                 </div>
                 {item.plan === "free" ? (
                   <span className="shrink-0">{planBadge(item)}</span>
@@ -858,6 +863,10 @@ export default function FinanceBoard({
                   </span>
                 )}
               </div>
+
+              {item.notes ? (
+                <p className="mt-1.5 line-clamp-3 text-xs break-words text-slate-400">{item.notes}</p>
+              ) : null}
 
               <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
                 <RowField
@@ -1243,13 +1252,13 @@ export default function FinanceBoard({
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Sold for</th>
-                <th className="px-4 py-3 text-right">Cost</th>
-                <th className="px-4 py-3 text-right">Profit</th>
-                <th className="px-4 py-3">Closed</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3 whitespace-nowrap">Customer</th>
+                <th className="px-4 py-3 whitespace-nowrap">Status</th>
+                <th className="px-4 py-3 whitespace-nowrap text-right">Sold for</th>
+                <th className="px-4 py-3 whitespace-nowrap text-right">Cost</th>
+                <th className="px-4 py-3 whitespace-nowrap text-right">Profit</th>
+                <th className="px-4 py-3 whitespace-nowrap">Closed</th>
+                <th className="px-4 py-3 whitespace-nowrap text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1436,9 +1445,10 @@ export default function FinanceBoard({
                 <label className={labelClass} htmlFor="mk-notes">
                   Notes
                 </label>
-                <input
+                <textarea
                   id="mk-notes"
-                  className={fieldClass}
+                  rows={3}
+                  className={textAreaClass}
                   value={marketingDraft.notes}
                   placeholder="Facebook boost, flyers, referral fee…"
                   onChange={(event) => setMarketingDraft({ ...marketingDraft, notes: event.target.value })}
@@ -1494,7 +1504,9 @@ export default function FinanceBoard({
                   <p className="font-semibold break-words text-navy-900">
                     {item.campaign || "Monthly budget"}
                   </p>
-                  <p className="text-xs break-words text-slate-500">{item.notes || "—"}</p>
+                  <p className="line-clamp-2 text-xs break-words text-slate-500" title={item.notes || undefined}>
+                    {item.notes || "-"}
+                  </p>
                 </div>
                 <div className="text-xs text-slate-500 @xl:text-right">
                   <p>planned {money(item.plannedMinor, item.currency)}</p>

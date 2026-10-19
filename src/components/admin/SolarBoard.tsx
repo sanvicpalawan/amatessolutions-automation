@@ -117,6 +117,8 @@ const majorInput = (minor: number) => (minor / 100).toFixed(2);
 const labelClass = "block text-[11px] font-bold uppercase tracking-wider text-slate-500";
 const fieldClass =
   "mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-navy-900 outline-none transition focus:border-solar-400 focus:ring-2 focus:ring-solar-400/30";
+/** Specs and descriptions are pasted in bulk — a one-line box is not enough. */
+const textAreaClass = `${fieldClass} resize-y leading-relaxed`;
 const smallFieldClass =
   "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none transition focus:border-solar-400 focus:ring-2 focus:ring-solar-400/30";
 /** A line stacks on narrow screens, where position alone no longer names the field. */
@@ -687,9 +689,10 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                 <label className={labelClass} htmlFor="prod-specs">
                   Specs
                 </label>
-                <input
+                <textarea
                   id="prod-specs"
-                  className={fieldClass}
+                  rows={3}
+                  className={textAreaClass}
                   value={productDraft.specs}
                   placeholder="Max PV 20 kW; battery 40-60 V; 3 MPPT; IP65"
                   onChange={(event) =>
@@ -701,9 +704,10 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                 <label className={labelClass} htmlFor="prod-notes">
                   Notes
                 </label>
-                <input
+                <textarea
                   id="prod-notes"
-                  className={fieldClass}
+                  rows={3}
+                  className={textAreaClass}
                   value={productDraft.notes}
                   placeholder="Anything the agent should know when recommending this"
                   onChange={(event) =>
@@ -870,7 +874,12 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
               </span>
 
               {product.specs ? (
-                <p className="mt-2 text-xs break-words text-slate-400">{product.specs}</p>
+                <p
+                  className="mt-2 line-clamp-2 text-xs break-words text-slate-400"
+                  title={product.specs}
+                >
+                  {product.specs}
+                </p>
               ) : null}
 
               <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
@@ -1050,9 +1059,10 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                 <label className={labelClass} htmlFor="pkg-desc">
                   Description
                 </label>
-                <input
+                <textarea
                   id="pkg-desc"
-                  className={fieldClass}
+                  rows={2}
+                  className={textAreaClass}
                   value={packageDraft.description}
                   placeholder="What this package suits"
                   onChange={(event) =>
@@ -1312,8 +1322,12 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                     <p className="mt-0.5 text-xs text-slate-500">
                       {totals.sizeKwp > 0 ? `${totals.sizeKwp} kWp` : "no size set"} ·{" "}
                       {pkg.items.length} line(s)
-                      {pkg.description ? ` · ${pkg.description}` : ""}
                     </p>
+                    {pkg.description ? (
+                      <p className="line-clamp-1 text-xs text-slate-400" title={pkg.description}>
+                        {pkg.description}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="w-32 shrink-0 text-right text-xs text-slate-500">
                     <p>cost {money(totals.costMinor)}</p>
@@ -1352,7 +1366,12 @@ export default function SolarBoard({ initialData }: { initialData: SolarData }) 
                     {pkg.items.length} line(s)
                   </p>
                   {pkg.description ? (
-                    <p className="mt-1 text-xs break-words text-slate-500">{pkg.description}</p>
+                    <p
+                      className="mt-1 line-clamp-2 text-xs break-words text-slate-500"
+                      title={pkg.description}
+                    >
+                      {pkg.description}
+                    </p>
                   ) : null}
 
                   <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
