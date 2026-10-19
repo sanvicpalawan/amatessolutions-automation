@@ -1,6 +1,7 @@
+import BlackoutScene from "@/components/site/BlackoutScene";
 import Reveal from "@/components/site/Reveal";
 import { Icon } from "@/lib/icons";
-import { mediaSrc, type SiteContent } from "@/lib/site";
+import type { SiteContent } from "@/lib/site";
 
 export default function WhyAmates({ content }: { content: SiteContent }) {
   return (
@@ -11,7 +12,7 @@ export default function WhyAmates({ content }: { content: SiteContent }) {
 
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <div className="grid items-center gap-14 lg:grid-cols-2">
-          <Reveal>
+          <Reveal from="left">
             <span className="inline-flex items-center gap-2 rounded-full border border-solar-300/60 bg-solar-50 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-solar-700">
               <span className="h-1.5 w-1.5 rounded-full bg-solar-500" />
               {content.whyEyebrow}
@@ -76,22 +77,13 @@ export default function WhyAmates({ content }: { content: SiteContent }) {
             </a>
           </Reveal>
 
-          <Reveal delay={120} className="lg:pl-6">
+          <Reveal delay={120} from="right" className="lg:sticky lg:top-28 lg:pl-6">
             <div className="relative">
               {/* offset accent frame */}
               <div className="absolute -left-5 -top-5 h-32 w-32 rounded-[1.75rem] border-2 border-solar-400/50" />
               <div className="absolute -bottom-6 -right-4 h-24 w-24 rounded-full bg-gradient-to-br from-solar-300/30 to-transparent blur-xl" />
 
-              <div className="relative overflow-hidden rounded-[1.75rem] shadow-[0_30px_60px_-24px_rgba(11,22,38,0.35)] ring-1 ring-navy-900/5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={mediaSrc(content.whyImage)}
-                  alt={content.whyHeading}
-                  loading="lazy"
-                  className="aspect-[4/3] w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-navy-950/45 via-transparent to-transparent" />
-              </div>
+              <BlackoutScene />
 
               {/* status card: static on mobile (avoids colliding with the
                   section below), floating from lg up */}

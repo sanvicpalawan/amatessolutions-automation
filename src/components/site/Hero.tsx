@@ -1,3 +1,4 @@
+import HeroSun from "@/components/site/HeroSun";
 import { Icon } from "@/lib/icons";
 import { mediaSrc, type SiteContent } from "@/lib/site";
 
@@ -12,6 +13,14 @@ export default function Hero({ content }: { content: SiteContent }) {
       />
       <div className="absolute inset-0 bg-gradient-to-b from-navy-950/85 via-navy-950/70 to-navy-950" />
       <div className="absolute -right-24 top-24 h-72 w-72 animate-sun rounded-full bg-solar-400/25 blur-3xl" />
+
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 hidden -translate-y-1/2 xl:block">
+        <div className="mx-auto flex max-w-6xl justify-end px-8">
+          <div className="animate-rise pointer-events-auto" style={{ animationDelay: "250ms" }}>
+            <HeroSun />
+          </div>
+        </div>
+      </div>
 
       <div className="relative mx-auto w-full max-w-6xl px-5 pb-20 pt-36 sm:px-8 sm:pt-40">
         <div className="animate-rise max-w-3xl">
