@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import CountUp from "@/components/site/CountUp";
 import { computeRoi, php } from "@/lib/roi";
 
 /**
@@ -81,7 +82,9 @@ export default function InstantEstimate({
             <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               {metric.label}
             </dt>
-            <dd className="mt-0.5 text-[15px] font-extrabold leading-tight tabular-nums text-navy-900 sm:text-base">{metric.value}</dd>
+            <dd className="mt-0.5 text-[15px] font-extrabold leading-tight tabular-nums text-navy-900 sm:text-base">
+              <CountUp value={metric.value} />
+            </dd>
             <dd className="text-[11px] text-slate-500">{metric.sub}</dd>
           </div>
         ))}

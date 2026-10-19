@@ -1,4 +1,5 @@
 import Reveal from "@/components/site/Reveal";
+import StepRail from "@/components/site/StepRail";
 import { Icon } from "@/lib/icons";
 import { STEP_ICONS } from "@/lib/icon-names";
 import { STEPS } from "@/lib/knowledge";
@@ -31,7 +32,8 @@ export default function StepFramework({ content }: { content: SiteContent }) {
           <p className="mt-4 text-[15px] leading-relaxed text-slate-300">{content.processBody}</p>
         </Reveal>
 
-        <ol className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <StepRail>
+        <ol className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, index) => (
             <Reveal key={step.key} delay={index * 110}>
               <li className="group relative h-full list-none overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-6 backdrop-blur-sm transition-all duration-300 hover:-translate-y-2 hover:border-solar-400/50 hover:bg-white/[0.07]">
@@ -61,6 +63,7 @@ export default function StepFramework({ content }: { content: SiteContent }) {
             </Reveal>
           ))}
         </ol>
+        </StepRail>
 
         <Reveal delay={140}>
           <div className="mt-12 flex flex-col gap-6 rounded-2xl border border-solar-400/25 bg-solar-400/[0.07] p-6 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">

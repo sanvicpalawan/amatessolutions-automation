@@ -31,18 +31,18 @@ export type SiteTheme = {
 };
 
 export const DEFAULT_THEME: SiteTheme = {
-  bodyFont: "Inter",
-  headingFont: "Inter",
+  bodyFont: "DM Sans",
+  headingFont: "Bricolage Grotesque",
   colors: {
-    primary: "#f59e0b",
-    primaryDark: "#b45309",
-    primaryLight: "#fccf4d",
-    navy: "#0b1626",
-    navyDeep: "#060d1a",
-    navyMid: "#1b3048",
+    primary: "#f2a12c",
+    primaryDark: "#b4690f",
+    primaryLight: "#ffcf7a",
+    navy: "#08222b",
+    navyDeep: "#041419",
+    navyMid: "#12404d",
     surface: "#ffffff",
-    surfaceMuted: "#f8fafc",
-    text: "#0b1626",
+    surfaceMuted: "#f6f1e7",
+    text: "#08222b",
     textMuted: "#475569",
   },
   radius: "1rem",
@@ -68,6 +68,7 @@ export const FONT_OPTIONS = [
   "Sora",
   "Figtree",
   "Barlow",
+  "Bricolage Grotesque",
 ] as const;
 
 export const COLOR_FIELDS: Array<{ key: keyof ThemeColors; label: string; hint: string }> = [

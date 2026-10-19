@@ -3,23 +3,23 @@
 @theme {
   /* No network fetch at build time: Inter if installed locally, otherwise a
      metric-compatible system stack. */
-  --font-sans: Inter, "Inter var", "Helvetica Neue", Helvetica, Arial,
+  --font-sans: "DM Sans", Inter, "Helvetica Neue", Helvetica, Arial,
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  --color-navy-950: #060d1a;
-  --color-navy-900: #0b1626;
-  --color-navy-800: #122237;
-  --color-navy-700: #1b3048;
-  --color-navy-600: #26415f;
+  --color-navy-950: #041419;
+  --color-navy-900: #08222b;
+  --color-navy-800: #0c2f3a;
+  --color-navy-700: #12404d;
+  --color-navy-600: #1b5563;
 
-  --color-solar-50: #fffaeb;
-  --color-solar-100: #fef0c7;
-  --color-solar-200: #fde38a;
-  --color-solar-300: #fccf4d;
-  --color-solar-400: #fbba24;
-  --color-solar-500: #f59e0b;
-  --color-solar-600: #d97706;
-  --color-solar-700: #b45309;
+  --color-solar-50: #fff7e8;
+  --color-solar-100: #ffebc2;
+  --color-solar-200: #ffdc94;
+  --color-solar-300: #ffcf7a;
+  --color-solar-400: #f8b445;
+  --color-solar-500: #f2a12c;
+  --color-solar-600: #d9851a;
+  --color-solar-700: #b4690f;
 }
 
 :root {
@@ -58,7 +58,10 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
-  .reveal {
+  .reveal,
+  .reveal-left,
+  .reveal-right,
+  .reveal-scale {
     opacity: 1;
     transform: none;
   }
@@ -168,6 +171,30 @@ body {
   opacity: 1;
   transform: translateY(0);
 }
+.reveal-left { transform: translateX(-34px); }
+.reveal-right { transform: translateX(34px); }
+.reveal-scale { transform: scale(0.94); }
+.reveal.is-visible.reveal-left,
+.reveal.is-visible.reveal-right,
+.reveal.is-visible.reveal-scale { transform: none; }
+
+/* Lights stuttering out when the grid drops. */
+@keyframes amates-flicker {
+  0% { opacity: 1; }
+  12% { opacity: 0.15; }
+  24% { opacity: 0.9; }
+  38% { opacity: 0.1; }
+  52% { opacity: 0.6; }
+  70% { opacity: 0.05; }
+  100% { opacity: 0.05; }
+}
+.animate-flicker { animation: amates-flicker 0.9s steps(1, end) forwards; }
+
+@keyframes amates-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-drift { animation: amates-drift 40s linear infinite; }
 
 .proposal-body h2 {
   font-size: 1.15rem;
