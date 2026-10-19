@@ -392,7 +392,7 @@ export default function NotesBoard({
           type="button"
           aria-expanded={open}
           onClick={() => setOpenNoteId(open ? null : note.id)}
-          className="flex w-full items-start gap-3 px-4 py-3.5 text-left"
+          className="flex w-full items-start gap-3 px-4 pt-3.5 text-left"
         >
           <span
             className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-bold uppercase ${avatarTone(
@@ -413,34 +413,6 @@ export default function NotesBoard({
             {gist && note.title ? (
               <span className="mt-1 block truncate text-xs text-slate-500">{gist}</span>
             ) : null}
-
-            <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              <span>{note.author}</span>
-              <span className="inline-flex items-center gap-1">
-                <Icon name="Clock" className="h-3 w-3" />
-                {formatDay(note.createdAt)}
-              </span>
-              {note.images.length > 0 ? (
-                <span className="inline-flex items-center gap-1 text-solar-600">
-                  <Icon name="Image" className="h-3 w-3" />
-                  {note.images.length}
-                </span>
-              ) : null}
-              {note.urls.length > 0 ? (
-                <span className="inline-flex items-center gap-1">
-                  <Icon name="Link2" className="h-3 w-3" />
-                  {note.urls.length}
-                </span>
-              ) : null}
-              {note.comments.length > 0 ? (
-                <span className="inline-flex items-center gap-1 text-navy-900">
-                  <Icon name="MessageSquare" className="h-3 w-3" />
-                  {note.comments.length}
-                </span>
-              ) : (
-                <span>No replies yet</span>
-              )}
-            </span>
           </span>
 
           <Icon
@@ -450,6 +422,59 @@ export default function NotesBoard({
             }`}
           />
         </button>
+
+        {/*
+          The meta line sits outside the toggle button on purpose. The links in it
+          are real anchors, and an <a> nested inside a <button> is invalid HTML and
+          a dead click target. `pl-16` lines the row up under the note title
+          (16px card padding + 36px avatar + 12px gap).
+        */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pb-3.5 pl-16 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <span>{note.author}</span>
+          <span className="inline-flex items-center gap-1">
+            <Icon name="Clock" className="h-3 w-3" />
+            {formatDay(note.createdAt)}
+          </span>
+          {note.images.length > 0 ? (
+            <span className="inline-flex items-center gap-1 text-solar-600">
+              <Icon name="Image" className="h-3 w-3" />
+              {note.images.length}
+            </span>
+          ) : null}
+
+          {/* Quick launch: get to a site you use often without opening the note. */}
+          {note.urls.slice(0, 4).map((url) => (
+            <a
+              key={url}
+              href={url}
+              target="_blank"
+              rel="noreferrer noopener"
+              title={url}
+              className="inline-flex max-w-[16rem] items-center gap-1 rounded-full border border-solar-300 bg-solar-50 px-2.5 py-1 text-[10px] font-bold normal-case tracking-normal text-solar-700 transition hover:border-solar-500 hover:bg-solar-100"
+            >
+              <Icon name="ExternalLink" className="h-3 w-3 shrink-0" />
+              <span className="truncate">{hostLabel(url)}</span>
+            </a>
+          ))}
+          {note.urls.length > 4 ? (
+            <button
+              type="button"
+              onClick={() => setOpenNoteId(note.id)}
+              className="inline-flex items-center rounded-full border border-slate-200 px-2.5 py-1 text-[10px] font-bold tracking-normal text-slate-500 transition hover:border-slate-400"
+            >
+              +{note.urls.length - 4} more
+            </button>
+          ) : null}
+
+          {note.comments.length > 0 ? (
+            <span className="inline-flex items-center gap-1 text-navy-900">
+              <Icon name="MessageSquare" className="h-3 w-3" />
+              {note.comments.length}
+            </span>
+          ) : (
+            <span>No replies yet</span>
+          )}
+        </div>
 
         {open ? (
           <div className="border-t border-slate-100 px-4 pb-4 pt-4">
