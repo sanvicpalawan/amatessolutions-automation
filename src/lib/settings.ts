@@ -15,6 +15,7 @@ export const SETTINGS_KEYS = {
   whatsapp: "whatsapp_config",
   whatsappAccessToken: "whatsapp_access_token",
   finance: "finance_config",
+  botKnowledge: "bot_knowledge",
 } as const;
 
 export type OpenRouterConfig = {

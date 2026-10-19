@@ -4,7 +4,16 @@
  * Used by the marketing page (client-safe copy) and by the backend AI agent,
  * which grounds every proposal in the 4-step framework, the four verticals and
  * the 25-year warranty / lifetime monitoring terms.
+ *
+ * This module stays free of `db` and `server-only` on purpose: the public site
+ * imports it. The editable half of the bot's knowledge arrives as an argument —
+ * see `src/lib/bot-knowledge.ts` for the stored copy.
  */
+import {
+  BOT_TOPICS,
+  DEFAULT_BOT_KNOWLEDGE,
+  type BotKnowledge,
+} from "@/lib/bot-knowledge-model";
 
 export type Step = {
   id: number;
@@ -134,14 +143,13 @@ export const SERVICE_STEPS = [
   },
 ] as const;
 
-export const WARRANTY_TERMS = [
-  "25-year performance warranty on Amates-supplied panels, subject to manufacturer terms.",
-  "Free lifetime remote monitoring is available only on systems that Amates Solutions installs.",
-  "Monitoring requires a functional WIFI connection at the site, provided and maintained by the client.",
-  "No modifications to the system may be made by anyone except Amates Solutions technicians; third-party modification voids monitoring and warranty.",
-  "Lifetime monitoring is subject to the lifespan of the appliances and of the software provided by the appliance manufacturer.",
-  "Inverter warranty is typically 5–10 years; battery warranty follows the cell manufacturer's cycle rating.",
-];
+/**
+ * The warranty and monitoring clauses. They live with the rest of the bot's
+ * knowledge so there is a single editable copy — see
+ * `src/lib/bot-knowledge-model.ts`. Re-exported under this name because the
+ * proposal writer and the marketing copy already import it.
+ */
+export const WARRANTY_TERMS = DEFAULT_BOT_KNOWLEDGE.warrantyTerms;
 
 export const PALAWAN_LOCATIONS = [
   "Puerto Princesa",
@@ -202,17 +210,29 @@ export const ENERGY_ASSUMPTIONS = {
   annualOmPhp: 6000,
 };
 
-/** The grounding document handed to the LLM on every proposal request. */
-export function buildKnowledgeDocument(): string {
+/**
+ * The grounding document handed to the LLM on every proposal request.
+ *
+ * `knowledge` is the owner's stored wording. Omit it and the shipped defaults
+ * are used, which is what any code path without a database should get.
+ */
+export function buildKnowledgeDocument(
+  knowledge: BotKnowledge = DEFAULT_BOT_KNOWLEDGE,
+): string {
   const steps = STEPS.map((s) => `${s.id}. ${s.title} — ${s.body}`).join("\n");
   const verticals = VERTICALS.map(
     (v) => `- ${v.title}: ${v.blurb} Key points: ${v.bullets.join("; ")}.`,
   ).join("\n");
-  const terms = WARRANTY_TERMS.map((t) => `- ${t}`).join("\n");
+  const terms = knowledge.warrantyTerms.map((t) => `- ${t}`).join("\n");
+  // The generic answer is how the bot declines, not a fact about the business,
+  // so it is guidance for the fallback rather than reference material.
+  const answers = BOT_TOPICS.filter((topic) => topic.key !== "generic")
+    .map((topic) => `- ${topic.label}: ${knowledge.answers[topic.key]}`)
+    .join("\n");
 
   return [
     "AMATES SOLUTIONS — COMPANY KNOWLEDGE BASE",
-    "Amates Solutions designs and installs high-resilience solar hybrid systems across Palawan, Philippines (Puerto Princesa, El Nido, San Vicente, Coron, Linapacan, Taytay and remote islands).",
+    knowledge.intro,
     "",
     "THE 4-STEP FRAMEWORK:",
     steps,
@@ -222,6 +242,10 @@ export function buildKnowledgeDocument(): string {
     "",
     "WARRANTY, MONITORING AND TERMS & CONDITIONS:",
     terms,
+    "",
+    "STANDARD ANSWERS THE OWNER WANTS GIVEN:",
+    answers,
+    ...(knowledge.extraFacts ? ["", "ADDITIONAL FACTS TO RESPECT:", knowledge.extraFacts] : []),
     "",
     "ROI ASSUMPTIONS (Palawan):",
     `- Grid tariff ≈ PHP ${ENERGY_ASSUMPTIONS.gridTariffPhpPerKwh}/kWh; diesel generator ≈ PHP ${ENERGY_ASSUMPTIONS.dieselTariffPhpPerKwh}/kWh.`,

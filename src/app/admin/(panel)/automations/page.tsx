@@ -1,4 +1,5 @@
 import AutomationConsole from "@/components/admin/AutomationConsole";
+import BotKnowledge from "@/components/admin/BotKnowledge";
 import PageHeader from "@/components/admin/PageHeader";
 import { listRules, recentLog } from "@/lib/automation";
 
@@ -18,6 +19,10 @@ export default async function AutomationsPage() {
         initialRules={rules as never}
         initialLog={log as never}
       />
+
+      <div className="mt-8">
+        <BotKnowledge />
+      </div>
     </div>
   );
 }

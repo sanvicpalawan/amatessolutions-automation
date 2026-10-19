@@ -11,9 +11,14 @@
  */
 import "server-only";
 
-import { buildKnowledgeDocument, ENERGY_ASSUMPTIONS, PALAWAN_LOCATIONS } from "@/lib/knowledge";
+import { getBotKnowledge } from "@/lib/bot-knowledge";
+import {
+  warrantyAnswer,
+  type BotKnowledge,
+  type BotTopicKey,
+} from "@/lib/bot-knowledge-model";
+import { buildKnowledgeDocument } from "@/lib/knowledge";
 import { chat } from "@/lib/openrouter";
-import { php } from "@/lib/roi";
 import type { Lead, Message } from "@/db/schema";
 
 export type FaqAnswer = {
@@ -41,58 +46,66 @@ export function looksLikeQuestion(text: string): boolean {
   return QUESTION_WORDS.test(trimmed);
 }
 
-type Fallback = { match: RegExp; answer: string };
+/**
+ * What a matcher can resolve to. Two of these are not stored answers:
+ * `warranty` is built from the terms list and `coverage` is the intro line, so
+ * there is no second copy of either to drift out of date.
+ */
+type MatcherKey = Exclude<BotTopicKey, "generic"> | "warranty" | "coverage";
 
-const FALLBACKS: Fallback[] = [
+/**
+ * Which question routes to which topic. This is routing, not knowledge, so it
+ * stays in code: the owner edits the words a topic produces, never the regexes.
+ * Order matters — the first match wins.
+ *
+ * Coverage has no answer of its own; the intro line answers it, so "where do
+ * you work?" has one editable source rather than two that can drift apart.
+ */
+const TOPIC_MATCHERS: Array<{ key: MatcherKey; match: RegExp }> = [
   {
+    key: "pricing",
     match: /price|pricing|cost|magkano|presyo|budget|afford|how much|quote|estimate|finance|payment/i,
-    answer: `Pricing is sized from your real load rather than sold as a package. As a guide, installed cost runs about ${php(ENERGY_ASSUMPTIONS.installedCostPhpPerKw)} per kW of solar plus ${php(ENERGY_ASSUMPTIONS.batteryCostPhpPerKwh)} per kWh of battery storage, so a small home system lands in the hundreds of thousands of pesos and a resort system runs into the millions. Send your monthly kWh or your monthly bill and the free site audit will turn that into a firm figure.`,
   },
+  { key: "warranty", match: /warrant|guarantee|how long.*(last|work)/i },
+  { key: "monitoring", match: /monitor|remote|wifi|wi-fi|internet|online/i },
   {
-    match: /warrant|guarantee|how long.*(last|work)/i,
-    answer:
-      "Amates-supplied panels carry a 25-year performance warranty, subject to the manufacturer's terms. Inverters are typically 5–10 years, and batteries follow the cell manufacturer's cycle rating. One important condition: only Amates Solutions technicians may modify the system — third-party changes void both the warranty and the monitoring.",
-  },
-  {
-    match: /monitor|remote|wifi|wi-fi|internet|online/i,
-    answer:
-      "Free lifetime remote monitoring comes with every system we install, and our desk watches your production 24/7 so we often spot a fault before you do. It does need a working WIFI connection at the site, provided by the client — without WIFI, monitoring pauses until the link is back.",
-  },
-  {
+    key: "timeline",
     match: /how long|timeline|how soon|lead time|when can|start|install time|duration/i,
-    answer:
-      "Four steps: energy audit, marine-grade technical design, installation by our own crews, then activation and handover with monitoring switched on. The audit is free and normally booked within days. Installation timing depends on system size and island logistics, and we handle the barge transport ourselves.",
   },
   {
-    match: /where|area|location|cover|serve|reach|palawan|island|el nido|coron|puerto|san vicente|linapacan|taytay/i,
-    answer: `We work across Palawan — ${PALAWAN_LOCATIONS.slice(0, 6).join(", ")} and remote islands — and we handle the barge logistics ourselves, so a remote site is normal for us rather than an exception.`,
+    key: "coverage",
+    match:
+      /where|area|location|cover|serve|reach|palawan|island|el nido|coron|puerto|san vicente|linapacan|taytay/i,
   },
   {
+    key: "maintenance",
     match: /maintenance|cleaning|repair|service|fix|existing system|already have/i,
-    answer:
-      "Maintenance covers panel cleaning, electrical inspection, performance diagnostics, remote monitoring support, upgrades and troubleshooting. You can take it on its own even if we did not install your system, and it includes continued monitoring support.",
   },
   {
+    key: "hardware",
     match: /battery|panel|inverter|hardware|marine|corrosion|salt|typhoon|durab/i,
-    answer:
-      "Everything is specified marine-grade: anodised or 316 stainless mounting, IP65+ hybrid inverters, sealed cable glands and corrosion-resistant conduit. That is chosen for coastal salt spray, 35°C+ heat and typhoon wind loading, which is where consumer-grade kits fail.",
   },
   {
-    match: /off.?grid|no (power|electricity)|generator|diesel|brownout|ration|unstable|outage|blackout/i,
-    answer:
-      "No grid, an unreliable grid, or a site running on diesel is our core case. We design a hybrid system with battery autonomy sized to your real daily consumption, so you are covered through outages and you burn far less fuel.",
+    key: "offgrid",
+    match:
+      /off.?grid|no (power|electricity)|generator|diesel|brownout|ration|unstable|outage|blackout/i,
   },
 ];
 
-const GENERIC_FALLBACK =
-  "I would rather not guess on your project, so let me have a specialist confirm that one. The fastest route to a firm answer is the free site audit — send me your location, and your monthly kWh or monthly bill, and we will take it from there.";
-
-function deterministicAnswer(question: string): string {
-  const found = FALLBACKS.find((entry) => entry.match.test(question));
-  return found ? found.answer : GENERIC_FALLBACK;
+/**
+ * The answer used when the AI cannot be reached. Every word of it comes from the
+ * owner's stored knowledge, so what the bot says offline matches what it says
+ * online and matches what the owner last typed.
+ */
+function deterministicAnswer(question: string, knowledge: BotKnowledge): string {
+  const found = TOPIC_MATCHERS.find((entry) => entry.match.test(question));
+  if (!found) return knowledge.answers.generic;
+  if (found.key === "warranty") return warrantyAnswer(knowledge);
+  if (found.key === "coverage") return knowledge.intro;
+  return knowledge.answers[found.key];
 }
 
-function systemPrompt(): string {
+function systemPrompt(knowledge: BotKnowledge): string {
   return [
     "You are the Amates Solutions assistant replying to WhatsApp messages from customers and guests in Palawan, Philippines.",
     "",
@@ -108,7 +121,7 @@ function systemPrompt(): string {
     "- Do not repeat an estimate or an answer the history shows you already gave; build on it instead.",
     "",
     "REFERENCE MATERIAL:",
-    buildKnowledgeDocument(),
+    buildKnowledgeDocument(knowledge),
   ].join("\n");
 }
 
@@ -161,9 +174,13 @@ export async function answerQuestion(
   lead?: Lead,
   history?: Message[],
 ): Promise<FaqAnswer> {
+  // Loaded once and used by both paths, so an offline answer and an online
+  // answer can never disagree about what the business says.
+  const knowledge = await getBotKnowledge();
+
   const result = await chat(
     [
-      { role: "system", content: systemPrompt() },
+      { role: "system", content: systemPrompt(knowledge) },
       { role: "user", content: userPrompt(question, lead, history) },
     ],
     undefined,
@@ -173,5 +190,9 @@ export async function answerQuestion(
     return { answer: result.content, engine: "openrouter", model: result.model };
   }
 
-  return { answer: deterministicAnswer(question), engine: "deterministic", model: result.model };
+  return {
+    answer: deterministicAnswer(question, knowledge),
+    engine: "deterministic",
+    model: result.model,
+  };
 }

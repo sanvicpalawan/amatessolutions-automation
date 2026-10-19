@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/db";
 import { proposals, type Lead } from "@/db/schema";
+import { getBotKnowledge } from "@/lib/bot-knowledge";
 import { buildKnowledgeDocument, ENERGY_ASSUMPTIONS, STEPS, WARRANTY_TERMS } from "@/lib/knowledge";
 import { chat } from "@/lib/openrouter";
 
@@ -157,6 +158,9 @@ export type GeneratedProposal = {
  */
 export async function generateProposal(lead: Lead, overrideModel?: string): Promise<GeneratedProposal> {
   const roi = computeRoi(lead);
+  // The owner's stored wording, so a proposal and a WhatsApp reply never quote
+  // different warranties or different coverage.
+  const knowledge = await getBotKnowledge();
 
   const systemPrompt = [
     "You are the Amates Solutions senior solar design consultant for Palawan, Philippines.",
@@ -165,7 +169,7 @@ export async function generateProposal(lead: Lead, overrideModel?: string): Prom
     "Never promise monitoring without WIFI, and always restate that only Amates may modify the system.",
     "Use PHP currency. Keep the whole proposal under 600 words.",
     "",
-    buildKnowledgeDocument(),
+    buildKnowledgeDocument(knowledge),
   ].join("\n");
 
   const userPrompt = [
