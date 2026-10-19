@@ -100,7 +100,7 @@ export const RULES: RuleDef[] = [
     key: "fleet_health_sweep",
     label: "Fleet health sweep",
     description:
-      "Hourly check of the monitored fleet. Any site in warning or offline automatically gets a maintenance job and an alert note.",
+      "Daily check of the monitored fleet. Any site in warning or offline automatically gets a maintenance job and an alert note.",
     trigger: "schedule",
     defaultEnabled: true,
     config: {},

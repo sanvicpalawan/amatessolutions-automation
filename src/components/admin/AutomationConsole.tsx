@@ -25,7 +25,7 @@ type LogEntry = {
 
 const TRIGGER_LABEL: Record<string, string> = {
   intake: "On every lead",
-  schedule: "Hourly cron",
+  schedule: "Daily cron",
 };
 
 const STATUS_STYLE: Record<string, string> = {
@@ -122,7 +122,7 @@ export default function AutomationConsole({
             </h2>
             <p className="mt-1 text-xs text-slate-500">
               Toggle what the system does for you. Intake rules fire on every new enquiry; the sweep
-              runs hourly via <code>/api/cron/sweep</code>.
+              runs once a day, 06:00 Asia/Manila, via <code>/api/cron/sweep</code>.
             </p>
           </div>
           <button
